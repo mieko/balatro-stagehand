@@ -198,6 +198,42 @@ Delivery is best-effort after a socket failure; the native error screen and
 private log remain. Hard native crashes cannot run a Lua handler. A fatal error
 does not establish whether submitted work applied and never permits replay.
 
+## Passive observation
+
+Use a separate connection to watch human or API-driven play:
+
+```js
+const observer = await connectLocal();
+var frame = await observer.spectate();
+if (frame) console.log(frame.view);
+// Later; retain the previous frame when idle returns null.
+var next = await observer.spectate({ after: frame ?? undefined, timeoutMs: 20000 });
+if (next) {
+  frame = next;
+  console.log(frame.view);
+}
+```
+
+`spectate({after, timeoutMs, signal})` returns `{position, boundary, view, state}`:
+a local delivery ordinal, `settled_position` or `choice_required`, the compact
+view and its rich captured state. First call returns the current ready position;
+later calls wait for a changed one, even without `after`. `after` must be the last
+frame object from this observer, not a serialized/reconnectable cursor.
+
+One wait per observer; default 30 seconds. Idle returns null without advancing
+the cursor. Abort, disconnect, endpoint removal, fatal errors and failed reads
+reject. Listeners are detached on every exit, including late subscription setup;
+an already-issued read may finish after cancellation. Close the connection when
+finished. This does not affect a driver's queue or inputs.
+
+Observation subscribes to `changed` and reads fresh state, without polling,
+normalization or autoskip. Widget refs, layout and dialogue-only changes do not
+produce frames; current dialogue remains in each captured state. Selection/order,
+resources and native choices do produce changes. Readiness comes
+from Balatro's public state, not animation stillness or proof another client's
+whole batch ended. Fast positions can be coalesced and indistinguishable actions
+need not yield a new frame. No gameplay is driven and no hidden data is queried.
+
 ## Human delay
 
 `setHumanDelay(400)` adds a 400ms wall-time pause before gameplay activations.

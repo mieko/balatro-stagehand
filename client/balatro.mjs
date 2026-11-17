@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { present } from './present.mjs';
+import { observationKey, observationBoundary, waitForObservation } from './spectator.mjs';
 export { present } from './present.mjs';
 
 const { connect, RemoteObject, forwardMethods } = await import(
@@ -77,6 +78,9 @@ export class Balatro extends RemoteObject {
   #queue = Promise.resolve();
   #discoveryLabels = false;
   #humanDelayMs = 0;
+  #spectatorLast;
+  #spectatorWaiting = false;
+  #spectatorPosition = 0;
 
   invoke(method, params = {}) {
     if (this.client.fatalError) {
@@ -88,6 +92,37 @@ export class Balatro extends RemoteObject {
 
   state() {
     return this.invoke('state');
+  }
+
+  async spectate({ after, ...options } = {}) {
+    if (this.#spectatorWaiting)
+      throw new Error('This observer is already waiting; await or abort that spectate call');
+
+    if (after !== undefined && after !== this.#spectatorLast?.frame)
+      throw new Error(
+        'Pass the last frame returned by this observer; reconnect starts a new baseline',
+      );
+
+    this.#spectatorWaiting = true;
+    try {
+      const state = await waitForObservation(
+        this,
+        (state) => state.ready && observationKey(state) !== this.#spectatorLast?.key,
+        options,
+      );
+      if (state === null) return null;
+
+      const frame = {
+        position: ++this.#spectatorPosition,
+        boundary: observationBoundary(state),
+        view: this.present(state),
+        state,
+      };
+      this.#spectatorLast = { frame, key: observationKey(state) };
+      return frame;
+    } finally {
+      this.#spectatorWaiting = false;
+    }
   }
 
   inspectCard(card) {

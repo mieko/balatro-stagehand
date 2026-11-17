@@ -15,6 +15,7 @@ local Errors = require('balatro_stagehand.errors')
 local Script = require('balatro_stagehand.love_script')
 Errors.install()
 local bridge, root, runtime, crash
+local position = { kind = 'FIXTURE', ready = true }
 
 function love.load()
     bridge = Bridge.new({ token = 'fixture-only', instance = 'fixture', port = 0 })
@@ -31,7 +32,12 @@ function love.load()
 
     root = bridge:register('Balatro', 'Balatro', {
         state = function()
-            return { kind = 'FIXTURE', ready = true }
+            return position
+        end,
+        setPosition = function(params)
+            position = params
+            bridge:emit(root, 'changed', position)
+            return true
         end,
         echo = function(params)
             return params
@@ -49,7 +55,7 @@ function love.load()
 
             return { action = 'test', status = 'accepted' }
         end,
-    }, nil, { completed = true })
+    }, nil, { completed = true, changed = true })
     local _, port = bridge.transport.listener:getsockname()
     print('FIXTURE_READY ' .. port)
     io.stdout:flush()

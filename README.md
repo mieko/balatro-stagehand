@@ -46,6 +46,8 @@ console.log(game.present(await game.decision()));
 For watchable automation, `game.setHumanDelay(400)` enables a pause before native
 activations; the default is zero, as in StS2. Cash-out stays visible for at least
 that interval. This is separate from native playback speed and passive observation.
+To watch someone else's play, use a separate connection's
+[`spectate()`](docs/api.md#passive-observation); it never drives the game.
 
 Read the current decision before acting. `state()` is passive; `decision()` waits
 for a usable boundary. Autoskip defaults to **off**: tutorial dialogue and earned
