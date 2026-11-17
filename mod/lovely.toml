@@ -1,0 +1,43 @@
+[manifest]
+version = "1.0.0"
+priority = 0
+
+[[patches]]
+[patches.pattern]
+target = "game.lua"
+pattern = "G.CONTROLLER:snap_to({node = G.shop:get_UIE_by_ID('next_round_button')})"
+position = "after"
+payload = "G.shop.stagehand_offers_ready = true"
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "conf.lua"
+pattern = "t.window.minheight = 100"
+position = "after"
+payload = """
+if os.getenv('STAGEHAND_ISOLATED') then
+    t.identity = 'stagehand-balatro'
+    t.window.width = 1000
+    t.window.height = 650
+    t.window.fullscreen = false
+end
+"""
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.pattern]
+target = "main.lua"
+pattern = "if os == 'OS X' or os == 'Windows' then"
+position = "at"
+payload = "if not _G.os.getenv('STAGEHAND_ISOLATED') and (os == 'OS X' or os == 'Windows') then"
+match_indent = true
+times = 1
+
+[[patches]]
+[patches.copy]
+target = "main.lua"
+position = "append"
+sources = ["entry.lua"]

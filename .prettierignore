@@ -1,0 +1,5 @@
+.local/
+node_modules/
+stagehand/
+mod/vendor/*.lua
+mod/vendor/websocket/
