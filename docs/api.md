@@ -132,10 +132,22 @@ controls. Joker rarity labels come from this build's native UI/localization.
 Native `canBeCopied` and current `copyCompatibility` remain visible for copy
 effects, without inferring a final score from them.
 
-`present(result)` is a pure compact view that preserves actionable refs and order.
-Ordinary playing cards use rank/suit/chips; effectful cards share entries in
-`definitions`. Zero resources, selected hidden cards, current counters, prices,
-blockers and partial progress remain visible. It neither mutates nor fetches data.
+`present(result)` is a pure compact view; it neither mutates nor fetches data.
+Array order is card order. Basic cards use `{ref, rank, suit, chips}`; modifiers,
+selection, unknowns and blocked actions remain explicit. Shared effect prose goes
+in `definitions`, and a repeated known `chipsScope` is shown once at the top.
+
+Action views omit routine run configuration and lifetime totals; current-round
+counters, skips, resource values and slot limits stay visible. Standalone
+`present(state)` includes run context and all counters. `{inventory: true}` also
+includes full run descriptions, lifetime counters and vouchers after an action.
+Endings and seeded/challenge/endless exceptions retain their context.
+
+`cardAction` summarizes the operation's card. A card no longer in the current
+visible collections is marked `historical: true` without a stale actionable ref
+or repeated definition. Purchase `steps` likewise summarize history. Raw results
+retain `selectedCard` and every full per-step snapshot; `{diagnostics: true}`
+returns that unchanged data.
 
 Visible Jokers, consumables, vouchers and packs use their normal native names and
 descriptions even when this save hasn't discovered them. This does not mark them
@@ -144,9 +156,8 @@ the original `discoveryLabel` where applicable;
 the session preference below controls which names `game.present(result)` shows.
 Effect descriptions remain available in either mode.
 
-`present(result, {inventory: true})` includes static voucher details;
-`{diagnostics: true}` returns the original rich object, including every retained
-purchase snapshot. `screenshot()` and `LoveScreen.capture()` both wait and return metadata plus `image: Buffer`.
+`screenshot()` and `LoveScreen.capture()` both wait and return metadata plus
+`image: Buffer`.
 
 ## Settings and recovery
 

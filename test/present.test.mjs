@@ -34,12 +34,12 @@ test('ordinary hands retain order and identity without repeating base-card prose
   assert.equal(view.money, 0);
   assert.equal(view.handsLeft, 0);
   assert.equal(view.discardsLeft, 0);
-  assert.deepEqual(view.hand[1], { ref: 'hidden', position: 2, hidden: true, selected: true });
+  assert.deepEqual(view.hand[1], { ref: 'hidden', hidden: true, selected: true });
   assert.equal(view.hand[0].chips, 2);
   assert.equal(view.hand[0].cost, undefined);
   assert.equal(view.preview, undefined);
   assert.equal(view.ui, undefined);
-  assert.deepEqual(view.definitions, []);
+  assert.equal(view.definitions, undefined);
   assert.deepEqual(state, before);
 });
 
@@ -111,7 +111,9 @@ test('shop prices, explicit choices and partial purchase evidence stay visible',
   assert.equal(view.shop.cards[0].cost, 0);
   assert.equal(view.shop.rerollCost, 0);
   assert.equal(view.choices[0].enabled, false);
-  assert.equal(view.steps[0].offer.ref, 'first');
+  assert.equal(view.steps[0].offer.historical, true);
+  assert.equal(view.steps[0].offer.name, 'First');
+  assert.equal(result.results[0].offer.ref, 'first');
   assert.deepEqual(view.remaining, ['next']);
   assert.deepEqual(view.blocker, { kind: 'inventory_full' });
   assert.equal(view.vouchers, undefined);
@@ -122,12 +124,21 @@ test('terminal reports remain distinct from per-step purchase results', () => {
   const state = {
     kind: 'WIN',
     ready: true,
-    result: { outcome: 'won', scores: { hand: 123 } },
+    run: { seeded: false, seed: 'PUBLIC42' },
+    result: {
+      outcome: 'won',
+      seed: 'PUBLIC42',
+      scores: {
+        hand: 123,
+        poker_hand: { hand: 'Pair', name: 'Localized Pair', count: 4 },
+      },
+    },
     choices: [{ ref: 'endless', enabled: true }],
   };
   assert.deepEqual(present(state).result, state.result);
   assert.deepEqual(present({ status: 'completed', state }).result, state.result);
   assert.equal(present({ status: 'completed', state }).steps, undefined);
+  assert.equal(present(state).run.seed, 'PUBLIC42');
 });
 
 test('normal names are the default while native discovery labels remain optional', () => {
@@ -148,7 +159,7 @@ test('normal names are the default while native discovery labels remain optional
   assert.equal(ordinary.shop.cards[0].discoveryLabel, undefined);
   assert.equal(discovery.shop.cards[0].name, 'Non découvert');
   assert.equal(ordinary.definitions[0].description, '+4 Mult');
-  assert.deepEqual(discovery.hand[0], { ref: 'back', position: 1, hidden: true });
+  assert.deepEqual(discovery.hand[0], { ref: 'back', hidden: true });
   assert.equal(present(raw, { diagnostics: true }), raw);
   assert.deepEqual(raw, before);
 });
@@ -212,4 +223,223 @@ test('an uncertain purchase remains visible separately from never-submitted offe
   assert.equal(view.attemptedPurchase.offer.name, 'Attempted Joker');
   assert.deepEqual(view.remaining, ['second']);
   assert.equal(present(raw, { diagnostics: true }), raw);
+});
+
+test('plain card identity is concise while variants, zero values and unknowns stay explicit', () => {
+  const raw = {
+    kind: 'SELECTING_HAND',
+    hand: [
+      {
+        ref: 'plain',
+        name: '2 of Hearts',
+        type: 'Default',
+        rank: '2',
+        suit: 'Hearts',
+        chips: 2,
+        chipsScope: 'card_bonus_before_edition',
+        description: '+2 chips',
+        effects: [],
+        traits: [],
+      },
+      {
+        ref: 'bonus',
+        name: 'Bonus seven',
+        type: 'Enhanced',
+        rank: '7',
+        suit: 'Diamonds',
+        chips: 37,
+        chipsScope: 'card_bonus_before_edition',
+        enhancement: 'm_bonus',
+        edition: { foil: true, chips: 50 },
+        seal: 'Gold',
+        description: '+7 chips +30 extra chips',
+        effects: [],
+        traits: [],
+        forcedSelection: true,
+      },
+      {
+        ref: 'unknown',
+        name: 'Unknown rank',
+        type: 'Default',
+        rank: null,
+        suit: 'Hearts',
+        chips: null,
+        chipsScope: null,
+        effects: null,
+        highlighted: null,
+        debuffed: null,
+      },
+      { ref: 'back', hidden: true, rank: 'Ace', suit: 'Spades', chips: 11 },
+    ],
+  };
+  const before = structuredClone(raw);
+  const view = present(raw);
+
+  assert.deepEqual(
+    view.hand.map((card) => card.ref),
+    ['plain', 'bonus', 'unknown', 'back'],
+  );
+  assert.deepEqual(view.hand[0], { ref: 'plain', rank: '2', suit: 'Hearts', chips: 2 });
+  assert.equal(view.chipsScope, 'card_bonus_before_edition');
+  assert.equal(view.hand[1].enhancement, 'm_bonus');
+  assert.equal(view.hand[1].edition.chips, 50);
+  assert.equal(view.hand[1].seal, 'Gold');
+  assert.equal(view.hand[1].forcedSelection, true);
+  assert.equal(view.hand[2].name, 'Unknown rank');
+  assert.equal(view.hand[2].rank, null);
+  assert.equal(view.hand[2].chips, null);
+  assert.equal(view.hand[2].selected, null);
+  assert.equal(view.hand[2].debuffed, null);
+  assert.equal(view.hand[2].chipsScope, null);
+  assert.deepEqual(view.hand[3], { ref: 'back', hidden: true });
+  assert.deepEqual(raw, before);
+});
+
+test('action views omit routine context while observations and explicit inspection remain self-contained', () => {
+  const state = {
+    kind: 'SHOP',
+    ready: true,
+    money: 0,
+    bankruptAt: 0,
+    run: {
+      deck: { id: 'b_red', name: 'Red Deck', description: 'Native deck rule' },
+      seeded: false,
+      endless: false,
+    },
+    slots: { jokers: 0, consumables: 2 },
+    hand: [],
+    jokers: [],
+    consumables: [],
+    tags: [],
+    choices: [],
+    shop: { cards: [], packs: [], vouchers: [], rerollCost: 0 },
+    counters: {
+      handsPlayed: 10,
+      cardsDiscarded: 12,
+      unusedDiscards: 3,
+      roundHandsPlayed: 0,
+      roundDiscardsUsed: 0,
+      skips: 0,
+    },
+  };
+  const raw = { status: 'completed', kind: 'cashOut', state };
+  const before = structuredClone(raw);
+  const view = present(raw);
+
+  assert.equal(view.run, undefined);
+  assert.deepEqual(view.counters, { roundHandsPlayed: 0, roundDiscardsUsed: 0, skips: 0 });
+  assert.equal(view.hand, undefined);
+  assert.equal(view.tags, undefined);
+  assert.equal(view.choices, undefined);
+  assert.equal(view.definitions, undefined);
+  assert.equal(view.money, 0);
+  assert.equal(view.bankruptAt, 0);
+  assert.equal(view.slots.jokers, 0);
+  assert.deepEqual(view.jokers, []);
+  assert.deepEqual(view.consumables, []);
+  assert.equal(view.shop.rerollCost, 0);
+  assert.equal(present(state).run.deck.id, 'b_red');
+  assert.deepEqual(present(state).counters, state.counters);
+  assert.deepEqual(present(raw, { inventory: true }).run, state.run);
+  assert.deepEqual(present(raw, { inventory: true }).counters, state.counters);
+  assert.equal(present(raw, { diagnostics: true }), raw);
+  assert.deepEqual(raw, before);
+});
+
+test('a consumed action card is labeled history without stale refs or redundant definitions', () => {
+  const raw = {
+    status: 'completed',
+    kind: 'pickPackCard',
+    state: {
+      kind: 'SHOP',
+      ready: true,
+      shop: { cards: [], rerollCost: 5 },
+      jokers: [],
+      consumables: [],
+    },
+    selectedCard: {
+      ref: 'old-earth',
+      name: 'Earth',
+      type: 'Planet',
+      description: 'Native level effect',
+    },
+    results: [
+      {
+        status: 'completed',
+        offer: { ref: 'old-pack', name: 'Celestial Pack', cost: 4 },
+        state: { kind: 'PLANET_PACK', money: 5 },
+      },
+    ],
+  };
+  const before = structuredClone(raw);
+  const view = present(raw);
+
+  assert.deepEqual(view.cardAction, {
+    kind: 'pickPackCard',
+    card: { name: 'Earth', type: 'Planet', historical: true },
+  });
+  assert.equal(view.selectedCard, undefined);
+  assert.equal(view.definitions, undefined);
+  assert.equal(view.steps[0].offer.ref, undefined);
+  assert.equal(view.steps[0].offer.name, 'Celestial Pack');
+  assert.equal(view.steps[0].offer.cost, 4);
+  assert.equal(view.steps[0].money, 5);
+  assert.deepEqual(raw, before);
+});
+
+test('meaningful exceptions, blocked choices and unavailable positions do not become routine omissions', () => {
+  const raw = {
+    status: 'choice_required',
+    state: {
+      kind: 'WIN',
+      ready: true,
+      ui: { inputLocked: true },
+      money: null,
+      handsLeft: 0,
+      run: { seeded: true, seed: 'PUBLIC42', endless: true },
+      result: { outcome: 'won', seed: 'PUBLIC42', scores: { hand: 0 } },
+      slots: null,
+      counters: null,
+      choices: [{ ref: 'blocked', enabled: false }],
+      handTypes: [{ name: 'Pair', level: 1, played: 0 }],
+      consumables: [
+        {
+          ref: 'target',
+          name: 'Aura',
+          canUseWithCurrentSelection: false,
+          useStatus: 'selection_required',
+          targeting: {
+            kind: 'hand_selection',
+            min: 1,
+            max: 1,
+            selectedCount: 0,
+            countSatisfied: false,
+          },
+        },
+      ],
+    },
+  };
+  const view = present(raw);
+
+  assert.equal(view.money, null);
+  assert.equal(view.inputLocked, true);
+  assert.equal(view.handsLeft, 0);
+  assert.equal(view.slots, null);
+  assert.equal(view.counters, null);
+  assert.equal(view.run.seed, 'PUBLIC42');
+  assert.deepEqual(view.result, raw.state.result);
+  assert.equal(view.choices[0].enabled, false);
+  assert.equal(view.handTypes[0].played, 0);
+  assert.equal(view.consumables[0].canUseWithCurrentSelection, false);
+  assert.equal(view.consumables[0].targeting.countSatisfied, false);
+
+  const unavailable = present({
+    status: 'unconfirmed',
+    state: null,
+    remaining: null,
+    error: 'Observation failed',
+  });
+  assert.equal(unavailable.state, null);
+  assert.equal(unavailable.remaining, null);
+  assert.equal(unavailable.error, 'Observation failed');
 });
