@@ -258,6 +258,57 @@ local function check_aura_targeting()
     print('NATIVE_TARGETING_OK')
 end
 
+local function check_native_results()
+    load_native('functions/UI_definitions')
+    local original_text, original_localize = DynaText, localize
+    DynaText = function(config)
+        return { config = config, string = config.string[1] }
+    end
+    localize = function(key, group)
+        return group == 'poker_hands' and 'localized:' .. key or key
+    end
+    G.UIT = { R = 1, C = 2, O = 3, T = 4 }
+    G.C.JOKER_GREY, G.C.WHITE = { 0.5, 0.5, 0.5, 1 }, { 1, 1, 1, 1 }
+    G.GAME.pseudorandom.seed = 'PUBLIC42'
+    G.GAME.round, G.GAME.round_resets = 23, { ante = 9 }
+    G.GAME.round_scores = { hand = { amt = 485652 }, poker_hand = { amt = 0 } }
+    G.GAME.hand_usage = {
+        trips = { order = 'Three of a Kind', count = 19 },
+        pair = { order = 'Pair', count = 4 },
+    }
+    local function attach_children(node)
+        node.children = node.nodes
+        for _, child in ipairs(node.children or {}) do
+            attach_children(child)
+        end
+        return node
+    end
+    local seed = attach_children(create_UIBox_round_scores_row('seed'))
+    local poker = attach_children(create_UIBox_round_scores_row('poker_hand'))
+    G.OVERLAY_MENU = { children = { { config = { id = 'from_game_won' } }, seed, poker } }
+    local Run = require('balatro_stagehand.run')
+    local Text = require('balatro_stagehand.text')
+    local result = Run.results()
+
+    assert(result.seed == 'PUBLIC42' and result.text:find(Text.read(seed), 1, true))
+    assert(result.scores.poker_hand.hand == 'Three of a Kind')
+    assert(result.scores.poker_hand.name == 'localized:Three of a Kind')
+    assert(result.scores.poker_hand.count == 19)
+    assert(Text.read(poker):find(result.scores.poker_hand.name, 1, true))
+    assert(Text.read(poker):find('(19)', 1, true))
+    assert(result.scores.hand == 485652)
+
+    -- Native ties retain the same pair iteration choice as the actual UI builder.
+    G.GAME.hand_usage.pair.count = 19
+    poker = attach_children(create_UIBox_round_scores_row('poker_hand'))
+    G.OVERLAY_MENU.children[3] = poker
+    result = Run.results()
+
+    assert(Text.read(poker):find(result.scores.poker_hand.name, 1, true))
+    DynaText, localize = original_text, original_localize
+    print('NATIVE_RESULTS_OK')
+end
+
 local function face_down_card(key, unique_val)
     local card = setmetatable({
         config = {},
@@ -421,6 +472,8 @@ function love.load()
     check_discovery_projection()
     check_chip_scope()
     check_aura_targeting()
+    check_native_results()
+    fixture_game()
     local CardAction = require('balatro_stagehand.card_action')
     local checks = 0
     local original_random = math.random

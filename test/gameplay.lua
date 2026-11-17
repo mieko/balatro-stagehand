@@ -96,7 +96,11 @@ do
         children = {
             { config = { id = 'from_game_won' } },
             button,
-            { config = { id = 'seed' }, children = { { config = { text = 'PRIVATESEED' } } } },
+            {
+                states = { visible = false },
+                config = { id = 'seed' },
+                children = { { config = { text = 'PRIVATESEED' } } },
+            },
             { config = { text = 'Victory' } },
         },
     }
@@ -572,6 +576,66 @@ do
     local unknown = state:targeting(card)
 
     assert(unknown.selectedCount == nil and unknown.countSatisfied == nil)
+end
+
+-- Results disclose only a seed already displayed by the native ending panel.
+do
+    local state = fixture()
+    G.STAGE, G.STATE = G.STAGES.RUN, G.STATES.ROUND_EVAL
+    G.GAME.pseudorandom = { seed = 'PUBLIC42' }
+    G.GAME.hand_usage = {
+        trips = { order = 'Three of a Kind', count = 19 },
+        pair = { order = 'Pair', count = 4 },
+    }
+    G.GAME.round_scores.poker_hand = { amt = 0 }
+    local seed_row = {
+        config = { id = 'seed' },
+        children = {
+            { config = { text = 'Graine' } },
+            { children = { { config = { text = 'PUBLIC42' } } } },
+        },
+    }
+    G.OVERLAY_MENU = { children = { { config = { id = 'from_game_won' } }, seed_row } }
+    local result = state:read()
+
+    assert(result.result.seed == 'PUBLIC42' and result.run.seed == 'PUBLIC42')
+    assert(result.result.text:find('PUBLIC42', 1, true))
+    assert(result.result.scores.poker_hand.hand == 'Three of a Kind')
+    assert(result.result.scores.poker_hand.name == 'Three of a Kind')
+    assert(result.result.scores.poker_hand.count == 19)
+    assert(result.result.scores.hand == 123)
+
+    seed_row.states = { visible = false }
+    result = state:read()
+
+    assert(result.result.seed == nil and result.run.seed == nil)
+    assert(not result.result.text:find('PUBLIC42', 1, true))
+
+    seed_row.states.visible = true
+    G.OVERLAY_MENU.states = { visible = false }
+    result = state:read()
+
+    assert(result.result.seed == nil and not result.result.text:find('PUBLIC42', 1, true))
+
+    G.STATE = G.STATES.SELECTING_HAND
+    G.OVERLAY_MENU = nil
+    result = state:read()
+
+    assert(result.result == nil and result.run.seed == nil)
+end
+
+-- No played hand is an actual zero count, while missing native usage data is unknown.
+do
+    fixture()
+    G.STATE = G.STATES.GAME_OVER
+    G.GAME.hand_usage = {}
+    local empty = Run.results().scores.poker_hand
+
+    assert(empty.count == 0 and empty.hand == nil and empty.name == 'k_none')
+
+    G.GAME.hand_usage = nil
+
+    assert(Run.results().scores.poker_hand == nil)
 end
 
 print('Gameplay checks passed')

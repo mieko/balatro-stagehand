@@ -160,6 +160,38 @@ function Run.continue_endless()
     Controls.click(node, 'exit_overlay_menu')
 end
 
+local function most_played_hand()
+    if not G.GAME.hand_usage then
+        return nil
+    end
+
+    local hand, count = nil, 0
+
+    for _, usage in pairs(G.GAME.hand_usage) do
+        if usage.count > count then
+            hand, count = usage.order, usage.count
+        end
+    end
+
+    return {
+        hand = hand,
+        name = hand and localize(hand, 'poker_hands') or localize('k_none'),
+        count = count,
+    }
+end
+
+local function visible_seed(text)
+    local seed = G.GAME.pseudorandom and G.GAME.pseudorandom.seed
+
+    if
+        type(seed) == 'string'
+        and Controls.find(G.OVERLAY_MENU, 'id', 'seed')
+        and text:find(seed, 1, true)
+    then
+        return seed
+    end
+end
+
 function Run.results()
     local ending = G.STATE == G.STATES.GAME_OVER or Run.is_win()
 
@@ -170,17 +202,21 @@ function Run.results()
     local scores = {}
 
     for name, value in pairs(G.GAME.round_scores or {}) do
-        if type(value.amt) == 'number' then
+        if name ~= 'poker_hand' and type(value.amt) == 'number' then
             scores[name] = value.amt
         end
     end
+
+    scores.poker_hand = most_played_hand()
+    local text = Text.read(G.OVERLAY_MENU)
 
     return {
         outcome = Run.is_win() and 'won' or 'lost',
         scores = scores,
         ante = G.GAME.round_resets.ante,
         round = G.GAME.round,
-        text = Text.read(G.OVERLAY_MENU, { seed = true }),
+        text = text,
+        seed = visible_seed(text),
         canContinueEndless = Run.is_win(),
     }
 end

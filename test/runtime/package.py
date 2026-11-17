@@ -21,5 +21,6 @@ with zipfile.ZipFile(sys.argv[1], "w") as archive:
                 "cardarea.lua",
                 "functions/misc_functions.lua",
                 "functions/button_callbacks.lua",
+                "functions/UI_definitions.lua",
             ]:
                 archive.writestr("native/" + name, native.read(name))

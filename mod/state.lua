@@ -616,6 +616,11 @@ function State:read()
             scope = 'native_hand_type_preview',
         }
     result.result = Run.results()
+
+    if result.run and result.result then
+        result.run.seed = result.result.seed
+    end
+
     result.hand = self:cards(G.hand)
     result.jokers = self:cards(G.jokers)
     result.consumables = self:cards(G.consumeables)

@@ -74,7 +74,7 @@ local function dynamic(object)
 end
 
 local function collect(node, result, seen, excluded)
-    if type(node) ~= 'table' or seen[node] then
+    if type(node) ~= 'table' or seen[node] or (node.states and node.states.visible == false) then
         return
     end
 
@@ -99,7 +99,10 @@ local function collect(node, result, seen, excluded)
         local object = config.object
         local content = object and object.string
 
-        if type(content) == 'string' or type(content) == 'table' then
+        if
+            (type(content) == 'string' or type(content) == 'table')
+            and not (object.states and object.states.visible == false)
+        then
             local value = dynamic(object)
 
             if value then

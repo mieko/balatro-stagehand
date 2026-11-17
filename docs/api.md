@@ -27,7 +27,13 @@ decision; it does not reconstruct or replay API history.
 `returnToMenu()` uses native navigation. At a `WIN` decision,
 `continueEndless()` closes the victory overlay; cash-out is still a separate
 decision. Terminal `state.result` contains the outcome and run statistics.
-Starting another run or returning to menu is explicit.
+`scores.poker_hand` is `{hand, name, count}`: native hand identity, localized name
+and play count. Other score counters remain numeric. No played hand gives count `0`
+and the native None label; missing usage data omits the statistic.
+
+`result.seed` and `run.seed` appear only while the native ending panel displays
+the seed; `result.text` retains that visible text. Active unseeded runs do not
+expose their hidden seed. Starting another run or returning to menu is explicit.
 
 Cash-out remains explicit because you can use/sell cards before the next shop is
 generated; that can change the offers. It is not treated as redundant navigation.
