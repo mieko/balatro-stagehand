@@ -1,8 +1,8 @@
 # Playing through the semantic API
 
 Follow the [setup and connection example](../README.md#play-from-javascript), then
-retain `game` between calls. Commands execute in the Lua service; other languages
-can call the same named operations through Stagehand's unchanged external client.
+retain `game` between calls. Commands execute in the Lua service. Clients in
+other languages can call the same operations over Stagehand's JSON-RPC WebSocket.
 
 `state()` is passive. `decision()` waits for a usable native boundary and honors
 the connection's autoskip preference, which defaults to off. Earned unlock notices
@@ -94,9 +94,9 @@ the game. Eternal/otherwise ineligible cards remain subject to native checks.
 ## Inspection and presentation
 
 Descriptions and related definitions come from native public hover models and
-localization; there is no separate card/effect catalog. Inspection does not call
-RNG-consuming effect getters. Face-down cards stay opaque, and observations never
-reveal hidden deck order, future offers, seeds or RNG internals.
+localization; there is no separate card/effect catalog. Semantic inspection avoids RNG-consuming effect getters. Face-down cards stay
+opaque. Gameplay observations omit hidden draw order, future offers, hidden seeds
+and RNG internals. The [Lua debugger](security.md) can access those internals.
 
 `inspectCard(observedCard)` returns its current native description and related
 definitions, edition, seal, stickers and visible values. `handTypes()` returns
@@ -237,9 +237,9 @@ need not yield a new frame. No gameplay is driven and no hidden data is queried.
 ## Human delay
 
 `setHumanDelay(400)` adds a 400ms wall-time pause before gameplay activations.
-Default/reset `setHumanDelay()` is zero; accepts integer milliseconds in 0–5000,
-matching StS2. It belongs to this client session; reads remain immediate and native
-animation speed stays unchanged.
+Use `setHumanDelay()` to restore the default of zero. The delay accepts 0–5000
+whole milliseconds and applies to this connection’s actions. Reads remain
+immediate and native animation speed stays unchanged.
 
 Cash-out has a minimum visible dwell: timing starts after the native cash-out
 button is first drawn, and `cashOut()` waits only the remaining interval before
@@ -257,9 +257,8 @@ independent of passive spectator subscriptions.
 Discovery exposes `Registry`, `Balatro`, `BalatroSceneTree`, `LoveRuntime`,
 `LoveScreen`, `LoveInput` and `LoveScript`. `LoveRuntime.info()` reports an `engine` name/version object and
 `save_directory`; Balatro version and Steam status belong to `Balatro.info()`.
-The authenticated connection can
-drive controls, capture the window and execute Lua with the game's process
-permissions. It is trusted developer access, not a sandbox for untrusted clients.
+Any authenticated client can drive controls, capture the window and execute Lua
+with the game's process permissions. See [security](security.md).
 
 `LoveScreen.dimensions()` returns `logical_size` and `texture_size` as `{x, y}`
 records. Capture metadata includes `capture`, `clock`, width/height, MIME and
@@ -350,17 +349,13 @@ the semantic methods for their game-specific completion and recovery behavior.
 
 ## Limits
 
-Native actions and eligibility checks remain authoritative; there is no second
-scoring engine. Tooltips, compatibility fields and hand previews are not promises
-of a final score, and not every card combination has been exercised through this API.
+Balatro decides which actions are legal and how a hand scores. The hand preview
+shows the hand type, base chips and multiplier. It cannot predict the final
+score, and not every card combination has been tested. End-of-round Joker
+reordering takes effect after the hand scores and before round-end effects.
+The gameplay API has no facility for scheduling moves mid-animation.
 
-All five pack families have native paths, but live qualification covers Tarot and
-Standard packs. Live consumable use is qualified only for Empress on two cards.
-Natural win/endless play, challenges, higher stakes and the
-Blueprint/Mime end-of-round ordering interaction remain unqualified. Ordering
-timing has source/fixture coverage only. Consumable fixtures check admission and
-routing, not every effect animation.
-
-Steamodded/other mods, arbitrary graphical settings, collection browsing and
-profile management are not qualified. Use the isolated app/profile described in
-the README; reloads restore native checkpoints, not API history.
+The supplied tools target vanilla Balatro 1.0.1o and LÖVE 11.5 on Apple Silicon
+macOS. Integration with Steamodded or other mods is unverified. The gameplay API
+has no dedicated controls for collection browsing, profile management or general
+graphics settings.
