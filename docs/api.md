@@ -1,361 +1,213 @@
 # Playing through the semantic API
 
-Follow the [setup and connection example](../README.md#play-from-javascript), then
-retain `game` between calls. Commands execute in the Lua service. Clients in
-other languages can call the same operations over Stagehand's JSON-RPC WebSocket.
+From the repository root, with the prepared game running:
 
-`state()` is passive. `decision()` waits for a usable native boundary and honors
-the connection's autoskip preference, which defaults to off. Earned unlock notices
-and tutorial dialogue remain explicit unless opted in; tutorial gameplay
-instructions always remain decisions. `choose(observedChoice)`
-uses current native UI references and interactivity, not English captions.
+```js
+const { connectLocal } = await import('./client/local.mjs');
+const game = await connectLocal();
+console.log(game.present(await game.decision()));
+```
+
+Retain `game` between calls. `state()` reads passively. `decision()` waits for a playable position
+or native choice. Pass an observed choice to `choose(choice)`.
+
+Gameplay commands run in order and resolve with `status: 'completed'` or `'choice_required'`. Use
+`result.state` for the next move and `game.present(result)` for a compact view. Card arguments
+accept observed objects or their `ref` strings. Transforming or flipping a card can replace its ref.
+Earlier observations keep their old values.
+
+Reuse the returned hand after Strength:
+
+```js
+const changed = await game.useConsumable(strength, [nine]);
+const hand = changed.state.hand;
+
+const tens = hand.filter((card) => card.rank === '10' && card.suit === 'Hearts');
+if (tens.length === 1) await game.playHand(tens);
+```
 
 ## Run lifecycle
 
-`runOptions()` lists native deck descriptions, per-deck stakes and challenge
-availability. Start with `startRun({deck, stake, seed, challenge, replace})`:
-
-- `deck` is an observed deck id; the default is Red Deck.
-- `stake` is an observed unlocked stake number; the default is White Stake.
-- `seed` is optional native seed entry: 1–8 letters/digits, uppercased, `0` becomes `O`.
-- `challenge` chooses an unlocked challenge instead of custom deck/stake/seed.
-- `replace: true` explicitly permits replacing an existing saved run.
-
-`continueRun()` loads the native checkpoint. It may precede the last unsaved
-decision; it does not reconstruct or replay API history.
-
-`returnToMenu()` uses native navigation. At a `WIN` decision,
-`continueEndless()` closes the victory overlay; cash-out is still a separate
-decision. Terminal `state.result` contains the outcome and run statistics.
-`scores.poker_hand` is `{hand, name, count}`: native hand identity, localized name
-and play count. Other score counters remain numeric. No played hand gives count `0`
-and the native None label; missing usage data omits the statistic.
-
-`result.seed` and `run.seed` appear only while the native ending panel displays
-the seed; `result.text` retains that visible text. Active unseeded runs do not
-expose their hidden seed. Starting another run or returning to menu is explicit.
-
-Cash-out remains explicit because you can use/sell cards before the next shop is
-generated; that can change the offers. It is not treated as redundant navigation.
+- `runOptions()` lists decks, stakes per deck, challenges and saved-run availability. `startRun()`
+  defaults to Red Deck, White Stake. Pass `deck` (observed ID), `stake` (unlocked number) and
+  optionally `seed` (1–8 letters/digits, uppercased, `0` becomes `O`), or choose an unlocked
+  `challenge` instead of deck/stake/seed. Replacing a save requires `replace: true`.
+- `continueRun()` loads the native checkpoint, which can precede the last decision.
+- At `WIN`, `continueEndless()` closes the victory overlay. Use/sell cards before `cashOut()` to
+  affect the next shop. `returnToMenu()` exits the run screen.
+- Terminal `state.result` includes statistics and visible ending text. `scores.poker_hand` is
+  `{hand, name, count}` for the most-played hand. No plays gives the native None label and count
+  `0`; missing usage data omits the statistic. `result.seed` and `run.seed` appear while the ending
+  panel shows the seed.
 
 ## Blinds and hands
 
-`blinds()` describes only the current ante: visible text, selection state and
-skip-tag effects. Use `selectBlind()`, `skipBlind()` or `rerollBoss()` when its
-native control is available. A reroll is paid and may produce the same boss.
+`blinds()` shows the current ante, skip tags and available controls (`canSkip`, `canReroll`). Use
+`selectBlind()`, `skipBlind()` or `rerollBoss()`. A paid reroll can produce the same boss.
 
-`selectCards(cards)` changes native highlighting and returns the current UI
-preview. `playHand(cards, options?)` and `discard(cards)` submit that selection and
-wait for resolution. Native blind restrictions remain authoritative. A rejected
-command may leave selection/order changes visible; inspect its outcome rather
-than assuming no UI change happened.
+`selectCards(cards)` highlights cards and returns the native preview: hand type, base chips/mult and
+blind rejection. Final scoring happens during `playHand(cards, options?)`. Face-down cards keep the
+unknown preview. `discard(cards)` also waits for resolution. A rejection can leave selection or
+order changes visible.
 
-The preview contains hand type, base chips/multiplier and native blind rejection.
-It is **not a final-score prediction**. Face-down selections retain the native
-unknown preview; the API does not identify them for you.
+`sortHand('rank' | 'suit')` returns native sort order, including face-down cards, and preserves
+selection. `reorderHand(cards)`, `reorderJokers(cards)` and `reorderConsumables(cards)` take full
+permutations. Pinned positions stay fixed. Scoring follows physical hand order regardless of
+selection order.
 
-Card objects/ref strings identify observed copies. Supply a full permutation to
-`reorderHand(cards)`, `reorderJokers(cards)` or `reorderConsumables(cards)`.
-Pinned cards keep their native positions. Argument selection order does not
-replace left-to-right scoring order. To reorder and play together, pass the full
-hand as `playHand(selectedCards, {handOrder: allCards})`.
+Play `selected` with Glass last:
 
-At a hand decision, `sortHand('rank')` or `sortHand('suit')` presses the native sort
-button and returns the resulting order. Face-down cards remain opaque, but their
-observed ordering can be used just as when sorting through the game's UI. Sorting
-does not play, discard or change the selection; an already-sorted hand completes
-normally too.
+```js
+const handOrder = hand.filter((card) => card.ref !== glass.ref).concat(glass);
+await game.playHand(selected, { handOrder });
+```
 
-For deliberate end-of-round ordering, `playHand` also accepts
-`endOfRoundJokerOrder: allJokers`. The service applies it at native `end_round`
-entry, after the entire hand score is calculated and before round-end effects.
-It cannot change that score. A stale permutation fails rather than restoring
-removed Jokers; pinned positions still apply. Ordinary play does not pause for
-timing decisions or require racing the scoring animation.
+`playHand(cards, {endOfRoundJokerOrder: allJokers})` applies the order after scoring, before
+round-end effects. A stale permutation fails.
 
 ## Shopping and packs
 
-`buy(offerOrList)` buys in order. Each applied purchase retains its own state in
-`results`; `remaining` identifies offers not submitted after a failure or choice.
-An `attemptedPurchase` with `status: 'unconfirmed'` was dispatched but not confirmed;
-it is excluded from `remaining`. Inspect fresh state rather than resubmitting it.
-A pack stops at its real choices, and full inventory stops before purchase.
+`buy(offerOrList)` buys in order and stops at a pack choice or before a purchase that would exceed
+capacity. `results` holds each applied purchase's state. `remaining` lists only unsubmitted offers.
+An `attemptedPurchase` with `status: 'unconfirmed'` was dispatched and excluded from `remaining`.
+Inspect the position before another purchase.
 
-`buyAndUse(offer, targets?)` uses the distinct native Buy & Use control.
-`useConsumable(ownedCard, targets?)` and `pickPackCard(packCard, targets?)` use
-explicit hand targets, or the currently highlighted selection when targets are
-omitted. Order-sensitive effects use current hand order; reorder first.
+`buyAndUse(offer, targets?)` uses the native Buy & Use control. `useConsumable(ownedCard, targets?)`
+and `pickPackCard(packCard, targets?)` use current highlights when targets are omitted. Other shop
+and pack actions are `sell(ownedCard)`, `rerollShop()`, `leaveShop()` and `skipPack()`.
 
-`sell(ownedCard)`, `rerollShop()`, `skipPack()`, `cashOut()` and `leaveShop()`
-perform their named native actions. They do not choose other offers, targets or
-replacements for you. Prices, bankruptcy allowance and inventory limits come from
-the game. Eternal/otherwise ineligible cards remain subject to native checks.
+Death copies the right selected card onto the left, regardless of target-array order. Place
+`destination` left of `source`:
+
+```js
+const others = hand.filter((card) => card.ref !== destination.ref && card.ref !== source.ref);
+const arranged = await game.reorderHand(others.concat(destination, source));
+await game.pickPackCard(death, arranged.state.hand.slice(-2));
+```
+
+For an owned Death, use `game.useConsumable(death, arranged.state.hand.slice(-2))`.
 
 ## Inspection and presentation
 
-Descriptions and related definitions come from native public hover models and
-localization; there is no separate card/effect catalog. Semantic inspection avoids RNG-consuming effect getters. Face-down cards stay
-opaque. Gameplay observations omit hidden draw order, future offers, hidden seeds
-and RNG internals. The [Lua debugger](security.md) can access those internals.
+- `inspectCard(card)` gives native hover text, related definitions and visible modifiers. Owned
+  cards expose `canSell`. Copy effects expose `canBeCopied` and `copyCompatibility` where
+  applicable.
+- Playing-card `chipsScope` is `card_bonus_before_edition`. The `chips` value includes enhancement
+  and permanent bonuses (Stone omits base rank), and is zero when debuffed. A foil nine shows `9`
+  plus its separate `50`-chip edition. Hand and Joker modifiers are outside this value. Edition
+  metadata does not imply an active effect when debuffed.
+- Consumable `targeting.kind` is `none` or `hand_selection`. For the latter, inspect `min`/`max`
+  and, when a hand is available, `selectedCount`/`countSatisfied`. `useStatus` is `available`,
+  `selection_required` or `native_unavailable`. `canUseWithCurrentSelection` checks native
+  eligibility for the current highlights, beyond the target count.
+- `handTypes()` and `state.handTypes` include descriptions, levels, chips/mult and play counts.
+  `deck()` returns the unordered public deck. `deck({remaining: true})` uses Balatro's unplayed-card
+  view, including face-down ambiguity. Deck entries have no actionable refs. Semantic observations
+  omit hidden card identities and seeds, draw order, future offers and RNG state.
 
-`inspectCard(observedCard)` returns its current native description and related
-definitions, edition, seal, stickers and visible values. `handTypes()` returns
-native poker-hand descriptions/current levels. `deck()` returns the full unordered
-public deck; `{remaining: true}` uses Balatro's public unplayed-card semantics,
-including face-down-draw ambiguity. Deck records have no actionable ref or draw
-position. Reacquire live refs after drawing/flipping cards.
-
-Consumables expose `targeting.kind`: `none` needs no caller-selected cards;
-`hand_selection` gives native `min`/`max`, observed `selectedCount` and
-`countSatisfied`. Aura also requires an editionless card. An unavailable hand
-omits its count/check rather than assuming zero. `useStatus` is `available`,
-`selection_required` (count unmet), or `native_unavailable` (another native check).
-`canUseWithCurrentSelection` remains authoritative for current highlights, not
-proposed targets; satisfying the count does not guarantee eligibility. The final
-native use guard can still refuse a use.
-
-Playing-card `chips` uses native `get_chip_bonus()`:
-`chipsScope: 'card_bonus_before_edition'`. It includes enhancement and permanent
-chip bonuses (Stone excludes base-rank chips), returns zero when debuffed, and
-excludes edition chips and hand/Joker modifiers. Thus a Bonus seven can report `37`,
-while a foil nine reports `9` with its separate `50`-chip edition. Edition metadata
-is separate from whether that edition can currently score (for example, when
-debuffed). These are card facts, not a final-score prediction.
-
-Ordinary run state includes visible `handTypes` with native descriptions, levels,
-chips/mult and play counts, using the same facts as `handTypes()`. Default
-`present()` shows only name/level/played; zero counts remain visible. Full raw
-state and purchase snapshots retain the complete records.
-
-Owned cards expose native `canSell`. Blind `canSkip`/`canReroll` reflect the current
-controls. Joker rarity labels come from this build's native UI/localization.
-Native `canBeCopied` and current `copyCompatibility` remain visible for copy
-effects, without inferring a final score from them.
-
-`present(result)` is a pure compact view; it neither mutates nor fetches data.
-Array order is card order. Basic cards use `{ref, rank, suit, chips}`; modifiers,
-selection, unknowns and blocked actions remain explicit. Shared effect prose goes
-in `definitions`, and a repeated known `chipsScope` is shown once at the top.
-
-Action views omit routine run configuration and lifetime totals; current-round
-counters, skips, resource values and slot limits stay visible. Standalone
-`present(state)` includes run context and all counters. `{inventory: true}` also
-includes full run descriptions, lifetime counters and vouchers after an action.
-Endings and seeded/challenge/endless exceptions retain their context.
-
-`cardAction` summarizes the operation's card. A card no longer in the current
-visible collections is marked `historical: true` without a stale actionable ref
-or repeated definition. Purchase `steps` likewise summarize history. Raw results
-retain `selectedCard` and every full per-step snapshot; `{diagnostics: true}`
-returns that unchanged data.
-
-Visible Jokers, consumables, vouchers and packs use their normal native names and
-descriptions even when this save hasn't discovered them. This does not mark them
-discovered or reveal face-down cards or unopened pack contents. Raw items retain
-the original `discoveryLabel` where applicable;
-the session preference below controls which names `game.present(result)` shows.
-Effect descriptions remain available in either mode.
-
-`screenshot()` and `LoveScreen.capture()` both wait and return metadata plus
-`image: Buffer`.
+`present(result)` preserves card order, puts effect text in `definitions` and summarizes purchase
+`steps`. A `historical: true` card no longer has an actionable ref in that view. `present(state)`
+includes run context and lifetime counters. Use `present(result, {inventory: true})` for vouchers,
+full run descriptions and lifetime counters after an action. Raw results retain `selectedCard` and
+every full purchase snapshot; `present(result, {diagnostics: true})` returns the original input.
 
 ## Settings and recovery
 
-`setDiscoveryLabels(boolean)` controls onboarding names for this connection;
-it defaults to **false**. Set it once, or connect with
-`connectLocal({discoveryLabels: true})`, and subsequent `game.present(result)` calls
-use that preference. `settings()` reports it alongside `autoskip`. It does not
-change the save or the normal names retained in raw results.
+`settings()` reports two connection preferences, both off by default. Set either in
+`connectLocal({autoskip: true, discoveryLabels: true})` or change it during play:
 
-`setAutoskip(boolean)` / `settings()` control this connection's autoskip preference;
-`connectLocal({autoskip: true})` also opts in. Autoskip affects `decision()` and
-command completion, advancing tutorial Next buttons and acknowledging earned unlock
-notices until a gameplay choice. It never chooses cards or skips a whole tutorial
-section. Unlock notices expose the revealed card and native text in `state.notice`;
-autoskipped notices remain in the command result’s `notifications`.
-`state()` stays passive.
+- `setAutoskip(true)` advances tutorial Next and earned unlock notices during `decision()` and
+  command completion. Gameplay choices stay explicit. Notices appear in `state.notice`, or in
+  `result.notifications` when autoskipped.
+- `setDiscoveryLabels(true)` shows onboarding labels in `present()`. Raw items retain native names
+  and applicable `discoveryLabel` even for undiscovered items.
 
-`options()` reports saved playback speed and available choices.
-`setOptions({gameSpeed: 'fastest'})` selects the native maximum (4× in this build),
-or pass an offered numeric speed. This calls the native option callback and saves the isolated
-profile's setting. Other native options are not exposed. `info()` reports installed
-game/LÖVE versions, save directory and Steam status.
+`setHumanDelay(ms)` paces this connection's gameplay activations. Pass 0–5000 whole milliseconds or
+omit to reset to zero. Each purchase and automatic acknowledgement is paced individually. Cash-out
+dwell starts when its button is first drawn.
 
-Commands share a client FIFO. Ordinary methods wait and return `completed` or
-`choice_required`; service-reported failure or uncertainty rejects with `.outcome`. Native
-acceptance is not completion. Transport requests and gameplay waits have separate
-deadlines. A timeout/disconnect does not cancel or replay accepted work.
+`options()` lists the profile's saved playback speed and available speeds. Pass an offered speed to
+`setOptions({gameSpeed})` or use `'fastest'` (4× in this build). `info()` reports game/LÖVE
+versions, save directory and Steam status.
 
-Use passive `state()` and `recover()` to inspect uncertainty. The service retains
-the current/latest operation in this process; `resumeQueue()` only resets the
-client's failed queue. Neither resumes/replays an uncertain game action.
-`close()` disconnects. Quit explicitly with
-`await (await game.client.builtin('LoveRuntime')).quit()`.
-
-Fatal Lua errors log a traceback and emit `LoveRuntime.fatal`. The JS connection
-subscribes automatically and fails pending/queued commands with the cause.
-Delivery is best-effort after a socket failure; the native error screen and
-private log remain. Hard native crashes cannot run a Lua handler. A fatal error
-does not establish whether submitted work applied and never permits replay.
+Service-reported failure or uncertainty rejects with `.outcome`. Timeout or disconnect leaves
+accepted work running without replay. Read `state()` and `recover()` (current/latest operation)
+before further input. `resumeQueue()` clears a failed client queue without resubmitting the action.
+A delivered `LoveRuntime.fatal` rejects pending and queued calls; submitted work may have applied.
+`close()` disconnects. `await (await game.client.builtin('LoveRuntime')).quit()` quits the game.
 
 ## Passive observation
 
-Use a separate connection to watch human or API-driven play:
+On a separate connection, `spectate()` returns the current ready position, then waits for a changed
+one on subsequent calls. Each frame has a local `position`, `boundary` (`settled_position` or
+`choice_required`), compact `view` and raw `state`. Readiness describes the native position, not
+completion of another client's queue.
 
 ```js
 const observer = await connectLocal();
-var frame = await observer.spectate();
+let frame = await observer.spectate();
 if (frame) console.log(frame.view);
-// Later; retain the previous frame when idle returns null.
-var next = await observer.spectate({ after: frame ?? undefined, timeoutMs: 20000 });
+
+const next = await observer.spectate({ after: frame ?? undefined, timeoutMs: 20000 });
 if (next) {
   frame = next;
   console.log(frame.view);
 }
 ```
 
-`spectate({after, timeoutMs, signal})` returns `{position, boundary, view, state}`:
-a local delivery ordinal, `settled_position` or `choice_required`, the compact
-view and its rich captured state. First call returns the current ready position;
-later calls wait for a changed one, even without `after`. `after` must be the last
-frame object from this observer, not a serialized/reconnectable cursor.
-
-One wait per observer; default 30 seconds. Idle returns null without advancing
-the cursor. Abort, disconnect, endpoint removal, fatal errors and failed reads
-reject. Listeners are detached on every exit, including late subscription setup;
-an already-issued read may finish after cancellation. Close the connection when
-finished. This does not affect a driver's queue or inputs.
-
-Observation subscribes to `changed` and reads fresh state, without polling,
-normalization or autoskip. Widget refs, layout and dialogue-only changes do not
-produce frames; current dialogue remains in each captured state. Selection/order,
-resources and native choices do produce changes. Readiness comes
-from Balatro's public state, not animation stillness or proof another client's
-whole batch ended. Fast positions can be coalesced and indistinguishable actions
-need not yield a new frame. No gameplay is driven and no hidden data is queried.
-
-## Human delay
-
-`setHumanDelay(400)` adds a 400ms wall-time pause before gameplay activations.
-Use `setHumanDelay()` to restore the default of zero. The delay accepts 0–5000
-whole milliseconds and applies to this connection’s actions. Reads remain
-immediate and native animation speed stays unchanged.
-
-Cash-out has a minimum visible dwell: timing starts after the native cash-out
-button is first drawn, and `cashOut()` waits only the remaining interval before
-clicking it. Scoring time does not count. Ordered purchases and automatic tutorial/
-unlock acknowledgements are paced individually. This does not delay physical human
-input or low-level scene-tree clicks.
-
-Other clients send `humanDelayMs` with the same game-operation parameters; the
-service owns these waits and advertises its completion allowance on acceptance.
-Disconnect does not cancel an accepted operation or replay it. This setting is
-independent of passive spectator subscriptions.
+`after` is optional. Pass only this observer's last frame object. An idle timeout returns `null` and
+preserves the cursor. One wait per observer, 30 seconds by default; pass `signal` to abort. Abort,
+disconnect or read failure rejects. Reconnecting starts a new baseline. Selection, order, resources
+and choices can produce frames. Dialogue-only changes do not. Fast positions can coalesce.
 
 ## Native services
 
-Discovery exposes `Registry`, `Balatro`, `BalatroSceneTree`, `LoveRuntime`,
-`LoveScreen`, `LoveInput` and `LoveScript`. `LoveRuntime.info()` reports an `engine` name/version object and
-`save_directory`; Balatro version and Steam status belong to `Balatro.info()`.
-Any authenticated client can drive controls, capture the window and execute Lua
-with the game's process permissions. See [security](security.md).
+Use `game.client.builtin(name)` for a discovered root. Roots include `Registry`, `Balatro` and:
 
-`LoveScreen.dimensions()` returns `logical_size` and `texture_size` as `{x, y}`
-records. Capture metadata includes `capture`, `clock`, width/height, MIME and
-`phase: 'next_rendered_image'`: LÖVE completes it on a subsequent draw, whereas
-Godot captures its last rendered image. The wire protocol returns acceptance
-then a correlated `captured` event; the JS wrapper handles that wait and decoding.
-LÖVE exposes its current window, without Godot viewport objects.
-
-`LoveInput.press({key})` / `release({key})` deliver LÖVE keyboard callbacks, not OS
-keyboard state or overrides of `love.keyboard.isDown()`. Held callbacks belong to
-their connection and are released on disconnect.
+- `LoveScreen.dimensions()` returns `logical_size` and `texture_size` as `{x, y}`.
+  `LoveScreen.capture()` and `game.screenshot()` wait for the next rendered image and return
+  metadata plus `image: Buffer`.
+- `LoveInput.press({key})` / `release({key})` send LÖVE keyboard callbacks, without changing
+  `love.keyboard.isDown()`. Held keys release on disconnect.
+- `LoveRuntime.info()` returns `engine` (name/version) and `save_directory`.
 
 ### Runtime Lua
 
-`LoveScript.evaluate({source, bindings?})` follows Godot's `Script` call shape.
-Supply Lua source defining `evaluate(bindings)`; it compiles once per call in a
-fresh definition scope with access to real globals such as `G`, `love`, `require`
-and `_G`. Definitions do not persist between calls, but changes to native objects
-or `_G` do. There is no sandbox, rollback or execution time limit.
+`LoveScript` executes arbitrary Lua code with the game's process permissions. See
+[security](security.md). Supply synchronous Lua defining `evaluate(bindings)`:
 
 ```js
 const script = await game.client.builtin('LoveScript');
-console.log(
-  await script.evaluate({
-    source: `function evaluate(bindings)
+const extra = await script.evaluate({
+  source: `function evaluate(bindings)
     return G.jokers.cards[bindings.index].ability.extra
-end`,
-    bindings: { index: 1 }, // Lua arrays are one-based.
-  }),
-);
+  end`,
+  bindings: { index: 1 },
+});
 ```
 
-Bindings and results use the existing JSON codec, without automatic card-ref
-resolution or live-object handles. Return plain tables, finite numbers, strings,
-booleans or nil/null; empty Lua tables encode as arrays unless marked as objects.
-Decoded binding arrays/objects preserve their JSON shape. Functions, native
-objects, cycles and results deeper than 64 levels are rejected. Only the first
-Lua return value is used; nil becomes null. Strings and object keys must be valid
-UTF-8; encode binary data (for example, as Base64) before returning it.
-
-Source and evaluator must finish synchronously; yielding is rejected and never
-resumed by the service. Syntax/missing-entry/yield errors use invalid-parameter
-errors; Lua runtime errors include a traceback. Unsupported or oversized results
-fail with a resource-limit error while keeping the connection usable. Changes
-made before any failure remain applied: inspect rather than automatically replay.
-
-Evaluation runs on the game's main thread and bypasses semantic scheduling,
-human delay and visibility rules. Wait for gameplay to settle before using it.
-A non-returning script blocks the game and listener; an RPC timeout cannot stop
-it. Independently started coroutines/events are not cancelled when a call ends.
+Bindings and the first return value are JSON data. Each call has a fresh definition scope and live
+globals. Evaluation runs on the game thread, outside the gameplay queue; wait for gameplay to
+settle. A blocking script freezes the game, and an RPC timeout cannot stop it. Changes persist even
+if evaluation or result encoding fails.
 
 ### Native tree fallback
 
-`BalatroSceneTree` inspects Balatro's own node/UI system. It belongs to the game,
-not LÖVE. Use it when a native control has no semantic helper:
+Use `BalatroSceneTree` for native controls without a semantic helper. `roots()`, `inspect({node})`,
+`children({node})` and `query(filters)` expose visible UI and public card areas.
 
 ```js
 const tree = await game.client.builtin('BalatroSceneTree');
-console.log(await tree.roots());
 const { nodes } = await tree.query({ button: 'sort_hand_suit' });
-if (nodes.length === 1 && nodes[0].enabled) {
-  console.log(await tree.click({ node: nodes[0].node }));
-}
+if (nodes.length === 1 && nodes[0].enabled) await tree.click({ node: nodes[0].node });
 ```
 
-`inspect({node})` describes one node; `children({node})` lists its visible children.
-`query()` searches breadth-first across UI registries and public card areas, deduplicating shared
-nodes. Optional `root` scopes it to one subtree. `class` matches native inheritance; `id` and `button` match
-exactly; `text` matches a case-sensitive literal substring of the node's own text.
-Native button names are independent of the display language.
-
-Nodes expose `node` references, traversal parents, native `class`/UI-control metadata and current
-text. Transforms use native game units; `visual_transform` is the animated position.
-These are native visibility flags, not a pixel-visibility test. Entry points may
-overlap. Text is capped at 2,048 UTF-8 bytes with `text_truncated`; no raw Lua tables,
-model-reference targets, hidden card identities or deck order are returned.
-
-`query` and `children` return `{nodes, more}` and accept `offset` / `limit` (default
-100, maximum 256). A traversal exceeding 4,096 nodes or 64 levels fails explicitly;
-scope large searches to an observed root. Pages are live queries, not a retained
-snapshot. Reacquire stale refs after UI changes.
-
-`click({node})` revalidates the currently visible native button and invokes its
-handler. `{clicked: true}` acknowledges dispatch, **not** completion of animation
-or gameplay; inspect the resulting UI before acting again. It refuses clicks
-during another semantic action or while native controls are unavailable. Prefer
-the semantic methods for their game-specific completion and recovery behavior.
+Filter by subtree `root`, inherited `class`, exact `id`/`button`, or case-sensitive literal `text`.
+`children` and `query` return `{nodes, more}` and accept `offset`/`limit` (default 100, max 256).
+Scope large queries to a root. Pages are live; reacquire stale refs after UI changes. `click`
+rechecks availability and refuses during a semantic action. `{clicked: true}` confirms dispatch;
+inspect the resulting position for completion.
 
 ## Limits
 
-Balatro decides which actions are legal and how a hand scores. The hand preview
-shows the hand type, base chips and multiplier. It cannot predict the final
-score, and not every card combination has been tested. End-of-round Joker
-reordering takes effect after the hand scores and before round-end effects.
-The gameplay API has no facility for scheduling moves mid-animation.
-
-The supplied tools target vanilla Balatro 1.0.1o and LÖVE 11.5 on Apple Silicon
-macOS. Integration with Steamodded or other mods is unverified. The gameplay API
-has no dedicated controls for collection browsing, profile management or general
-graphics settings.
+Tested on Balatro 1.0.1o and LÖVE 11.5.
