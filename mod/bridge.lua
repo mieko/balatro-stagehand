@@ -1,4 +1,5 @@
 local json = require('dkjson')
+local utf8 = require('utf8')
 local Transport = require('balatro_stagehand.transport')
 local Bridge = {}
 Bridge.__index = Bridge
@@ -288,8 +289,46 @@ function Bridge:message(peer, bytes)
     end
 
     if result then
-        self.transport:send(peer, json.encode(result))
+        self.transport:send(peer, self:encode_response(result))
     end
+end
+
+function Bridge:encode_response(response)
+    local ok, encoded = pcall(json.encode, response)
+
+    local message
+
+    if not ok then
+        message = 'RPC result cannot be encoded'
+    elseif #encoded > Transport.MAX_BYTES then
+        message = 'RPC result exceeds the message limit'
+    elseif not utf8.len(encoded) then
+        message = 'RPC result is not valid UTF-8'
+    else
+        return encoded
+    end
+    local function failure(item)
+        return {
+            jsonrpc = '2.0',
+            id = item.id,
+            error = {
+                code = Bridge.RESOURCE_LIMIT,
+                message = message .. '; do not replay automatically',
+            },
+        }
+    end
+
+    if response.jsonrpc then
+        return json.encode(failure(response))
+    end
+
+    local failures = Bridge.array()
+
+    for _, item in ipairs(response) do
+        failures[#failures + 1] = failure(item)
+    end
+
+    return json.encode(failures)
 end
 
 function Bridge:emit(object, event, value)

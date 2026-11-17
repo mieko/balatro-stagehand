@@ -11,6 +11,7 @@ local Errors = require('balatro_stagehand.errors')
 local Options = require('balatro_stagehand.options')
 local Run = require('balatro_stagehand.run')
 local Runtime = require('balatro_stagehand.love_runtime')
+local Script = require('balatro_stagehand.love_script')
 local Screen = require('balatro_stagehand.love_screen')
 local SceneTree = require('balatro_stagehand.scene_tree')
 local game_options = require('balatro_stagehand.game_options')
@@ -150,6 +151,7 @@ function love.load(...)
     end, { changed = true, completed = true })
     local runtime =
         bridge:register('LoveRuntime', 'LoveRuntime', Runtime, Runtime.info, { fatal = true })
+    bridge:register('LoveScript', 'LoveScript', Script)
     local scene_tree = SceneTree.new(state)
     local tree_operations = {}
 

@@ -308,6 +308,7 @@ export const balatroWrappers = {
     return objects.get(remote.id);
   },
   LoveRuntime: forwardMethods(['info', 'quit']),
+  LoveScript: forwardMethods(['evaluate']),
   LoveInput: forwardMethods(['press', 'release']),
   LoveScreen: (remote) => ({
     ...forwardMethods(['dimensions'])(remote),

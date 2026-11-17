@@ -8,6 +8,10 @@ Use native actions and player-visible facts. Do not expose hidden deck order,
 future shops, seeds or RNG internals through semantic observations. Never simulate
 legal play by editing score, money, cards or unlocks.
 
+`LoveScript` is a separate, trusted Lua execution escape hatch. Use it to inspect
+or deliberately modify game internals only when the caller requests that work;
+semantic gameplay observations still expose only player-visible facts.
+
 Work on an isolated app/profile with Steam integration disabled. Preserve the
 Steam installation and normal saves. Coordinate reloads with the current driver.
 Keep copied proprietary source, downloaded tools, sessions, tokens, exported saves

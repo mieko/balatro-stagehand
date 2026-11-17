@@ -5,6 +5,7 @@ local handshake = require('websocket.handshake')
 local Transport = {}
 Transport.__index = Transport
 local MAX_BYTES = 8 * 1024 * 1024
+Transport.MAX_BYTES = MAX_BYTES
 
 function Transport.new(host, port, on_message, on_close)
     local listener = assert(socket.bind(host, port))

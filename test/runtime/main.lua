@@ -1,4 +1,4 @@
-for _, name in ipairs({ 'bridge', 'transport', 'errors' }) do
+for _, name in ipairs({ 'bridge', 'transport', 'errors', 'love_script' }) do
     package.preload['balatro_stagehand.' .. name] =
         assert(love.filesystem.load('mod/' .. name .. '.lua'))
 end
@@ -12,6 +12,7 @@ package.preload.dkjson = assert(love.filesystem.load('mod/vendor/dkjson.lua'))
 
 local Bridge = require('balatro_stagehand.bridge')
 local Errors = require('balatro_stagehand.errors')
+local Script = require('balatro_stagehand.love_script')
 Errors.install()
 local bridge, root, runtime, crash
 
@@ -22,6 +23,7 @@ function love.load()
             return { fixture = true }
         end,
     }, nil, { fatal = true })
+    bridge:register('LoveScript', 'LoveScript', Script)
     Errors.notify = function(fatal)
         bridge:emit(runtime, 'fatal', fatal)
         bridge.transport:flush()

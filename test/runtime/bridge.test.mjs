@@ -35,13 +35,13 @@ test(
     );
     const responses = await batch;
     assert.equal(responses[0].result.engine.name, 'LÖVE');
-    assert.equal(responses[1].result.length, 3);
+    assert.equal(responses[1].result.length, 4);
     await assert.rejects(connect(url, { token: 'wrong' }), /Authentication failed/);
     const client = await connectBalatro(url, { token: 'fixture-only' });
     t.after(() => client.close());
     assert.deepEqual(
       (await client.client.objects()).map((object) => object.label),
-      ['Balatro', 'LoveRuntime', 'Registry'],
+      ['Balatro', 'LoveRuntime', 'LoveScript', 'Registry'],
     );
     const payload = { text: 'large λ payload '.repeat(10000), zero: 0, flag: false, list: [] };
     assert.deepEqual(await client.invoke('echo', payload), payload);

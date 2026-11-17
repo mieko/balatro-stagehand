@@ -91,6 +91,8 @@ ordering, purchases, targeting, inspection and optional tutorial autoskip.
 
 `BalatroSceneTree` provides a native UI-tree fallback for controls without a
 semantic binding; see [tree inspection](docs/api.md#native-tree-fallback).
+For trusted debugging, [`LoveScript`](docs/api.md#runtime-lua) evaluates Lua inside
+the game, with access to its globals and native libraries.
 
 ## Development
 

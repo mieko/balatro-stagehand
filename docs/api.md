@@ -219,11 +219,11 @@ independent of passive spectator subscriptions.
 ## Native services
 
 Discovery exposes `Registry`, `Balatro`, `BalatroSceneTree`, `LoveRuntime`,
-`LoveScreen` and `LoveInput`. `LoveRuntime.info()` reports an `engine` name/version object and
+`LoveScreen`, `LoveInput` and `LoveScript`. `LoveRuntime.info()` reports an `engine` name/version object and
 `save_directory`; Balatro version and Steam status belong to `Balatro.info()`.
 The authenticated connection can
-drive controls, quit and capture the window. It is trusted local automation, not
-a sandbox for untrusted clients. No arbitrary Lua evaluation root is enabled.
+drive controls, capture the window and execute Lua with the game's process
+permissions. It is trusted developer access, not a sandbox for untrusted clients.
 
 `LoveScreen.dimensions()` returns `logical_size` and `texture_size` as `{x, y}`
 records. Capture metadata includes `capture`, `clock`, width/height, MIME and
@@ -235,6 +235,45 @@ LÖVE exposes its current window, without Godot viewport objects.
 `LoveInput.press({key})` / `release({key})` deliver LÖVE keyboard callbacks, not OS
 keyboard state or overrides of `love.keyboard.isDown()`. Held callbacks belong to
 their connection and are released on disconnect.
+
+### Runtime Lua
+
+`LoveScript.evaluate({source, bindings?})` follows Godot's `Script` call shape.
+Supply Lua source defining `evaluate(bindings)`; it compiles once per call in a
+fresh definition scope with access to real globals such as `G`, `love`, `require`
+and `_G`. Definitions do not persist between calls, but changes to native objects
+or `_G` do. There is no sandbox, rollback or execution time limit.
+
+```js
+const script = await game.client.builtin('LoveScript');
+console.log(
+  await script.evaluate({
+    source: `function evaluate(bindings)
+    return G.jokers.cards[bindings.index].ability.extra
+end`,
+    bindings: { index: 1 }, // Lua arrays are one-based.
+  }),
+);
+```
+
+Bindings and results use the existing JSON codec, without automatic card-ref
+resolution or live-object handles. Return plain tables, finite numbers, strings,
+booleans or nil/null; empty Lua tables encode as arrays unless marked as objects.
+Decoded binding arrays/objects preserve their JSON shape. Functions, native
+objects, cycles and results deeper than 64 levels are rejected. Only the first
+Lua return value is used; nil becomes null. Strings and object keys must be valid
+UTF-8; encode binary data (for example, as Base64) before returning it.
+
+Source and evaluator must finish synchronously; yielding is rejected and never
+resumed by the service. Syntax/missing-entry/yield errors use invalid-parameter
+errors; Lua runtime errors include a traceback. Unsupported or oversized results
+fail with a resource-limit error while keeping the connection usable. Changes
+made before any failure remain applied: inspect rather than automatically replay.
+
+Evaluation runs on the game's main thread and bypasses semantic scheduling,
+human delay and visibility rules. Wait for gameplay to settle before using it.
+A non-returning script blocks the game and listener; an RPC timeout cannot stop
+it. Independently started coroutines/events are not cancelled when a call ends.
 
 ### Native tree fallback
 

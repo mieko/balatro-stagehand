@@ -11,6 +11,37 @@ load_native('engine/ui')
 load_native('functions/misc_functions')
 local native_localize = localize
 
+local function check_scripted_joker()
+    local Script = require('balatro_stagehand.love_script')
+    local center = G.P_CENTERS.j_card_sharp
+    local joker = setmetatable({
+        T = { x = 0, y = 0, w = 1, h = 1 },
+        config = { card = {} },
+        params = {},
+        set_sprites = function() end,
+    }, Card)
+    G.GAME.used_jokers = {}
+    joker:set_ability(center, true)
+    G.jokers.cards = { joker }
+    G.GAME.hands = { Pair = { played_this_round = 2 } }
+    local context = { joker_main = true, cardarea = G.jokers, scoring_name = 'Pair' }
+    assert(joker:calculate_joker(context).Xmult_mod == 3)
+
+    local result = Script.evaluate({
+        source = [[
+function evaluate(bindings)
+    local joker = G.jokers.cards[1]
+    joker.ability.extra.Xmult = bindings.multiplier
+    return joker.ability.extra.Xmult
+end
+]],
+        bindings = { multiplier = 5 },
+    })
+    assert(result == 5)
+    assert(joker:calculate_joker(context).Xmult_mod == 5)
+    print('NATIVE_SCRIPTED_JOKER_OK')
+end
+
 local function check_tooltip_lifetimes()
     local state = require('balatro_stagehand.state').new()
     local created, active = 0, {}
@@ -453,6 +484,7 @@ function love.load()
         'run',
         'state',
         'scene_tree',
+        'love_script',
     }) do
         package.preload['balatro_stagehand.' .. name] =
             assert(love.filesystem.load('mod/' .. name .. '.lua'))
@@ -473,6 +505,8 @@ function love.load()
     check_chip_scope()
     check_aura_targeting()
     check_native_results()
+    fixture_game()
+    check_scripted_joker()
     fixture_game()
     local CardAction = require('balatro_stagehand.card_action')
     local checks = 0

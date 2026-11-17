@@ -13,6 +13,7 @@ test(
     assert.match(fixture.output(), /NATIVE_CHIP_SCOPE_OK/);
     assert.match(fixture.output(), /NATIVE_TARGETING_OK/);
     assert.match(fixture.output(), /NATIVE_RESULTS_OK/);
+    assert.match(fixture.output(), /NATIVE_SCRIPTED_JOKER_OK/);
     assert.match(fixture.output(), /NATIVE_TREE_OK/);
     assert.match(fixture.output(), /NATIVE_TOOLTIP_LIFETIME_OK 1000/);
     assert.ok(Number(result[1]) > 0);
