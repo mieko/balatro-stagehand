@@ -1,22 +1,109 @@
 local socket = require('socket')
 local frame = require('websocket.frame')
-local handshake = require('websocket.handshake')
+local Http = require('balatro_stagehand.http')
+local Config = require('balatro_stagehand.server_config')
 
 local Transport = {}
 Transport.__index = Transport
 local MAX_BYTES = 8 * 1024 * 1024
+local HELLO_TIMEOUT_SECONDS = 5
 Transport.MAX_BYTES = MAX_BYTES
 
-function Transport.new(host, port, on_message, on_close)
-    local listener = assert(socket.bind(host, port))
-    listener:settimeout(0)
+local function bind(host, port)
+    if host ~= '*' and host ~= '::' then
+        return assert(socket.bind(host, port))
+    end
+
+    local listener, problem = socket.tcp6()
+
+    if not listener then
+        assert(host == '*', problem)
+
+        return assert(socket.bind('0.0.0.0', port))
+    end
+
+    local ok, failure = pcall(function()
+        assert(listener:setoption('ipv6-v6only', host ~= '*'))
+        assert(listener:setoption('reuseaddr', true))
+        assert(listener:bind('::', port))
+        assert(listener:listen(32))
+    end)
+
+    if not ok then
+        listener:close()
+        error(failure, 0)
+    end
+
+    return listener
+end
+
+local function bind_loopbacks(port)
+    local hosts = {}
+    for _, host in ipairs({ '127.0.0.1', '::1' }) do
+        local ok, probe = pcall(socket.bind, host, 0)
+        if ok and probe then
+            probe:close()
+            hosts[#hosts + 1] = host
+        end
+    end
+
+    assert(#hosts > 0, 'No loopback address is available')
+    local listeners = {}
+    for _, host in ipairs(hosts) do
+        local listener, problem = socket.bind(host, port)
+        if not listener then
+            for _, opened in ipairs(listeners) do
+                opened:close()
+            end
+            error(problem, 0)
+        end
+
+        listeners[#listeners + 1] = listener
+        if port == 0 then
+            local _, actual_port = listener:getsockname()
+            port = actual_port
+        end
+    end
+
+    return listeners
+end
+
+function Transport.new(host, port, on_message, on_close, token_required, assets)
+    assert(token_required or Config.is_loopback(host), 'Remote connections require an access token')
+    local routes = Http.routes(assets or {}, token_required)
+    local listeners = host == 'localhost' and bind_loopbacks(port) or { bind(host, port) }
+    for _, listener in ipairs(listeners) do
+        listener:settimeout(0)
+    end
 
     return setmetatable({
-        listener = listener,
+        listeners = listeners,
         peers = {},
         on_message = on_message,
         on_close = on_close,
+        routes = routes,
+        host = host,
     }, Transport)
+end
+
+function Transport:endpoints()
+    local endpoints = {}
+    for _, listener in ipairs(self.listeners) do
+        local host, port = listener:getsockname()
+        endpoints[#endpoints + 1] = { host = host, port = port }
+    end
+
+    return endpoints
+end
+
+function Transport:shutdown()
+    for _, listener in ipairs(self.listeners) do
+        listener:close()
+    end
+    self.listeners = {}
+    for peer in pairs(self.peers) do
+        self:close(peer)
+    end
 end
 
 function Transport:close(peer)
@@ -57,10 +144,13 @@ function Transport:receive(peer)
 
     if not peer.upgraded then
         local ending = peer.incoming:find('\r\n\r\n', 1, true)
+        if (ending and ending + 3 or #peer.incoming) > Http.MAX_HEADER_BYTES then
+            self:queue(peer, Http.header_too_large())
+            peer.closing = true
+            return
+        end
 
         if not ending then
-            assert(#peer.incoming <= 16384, 'WebSocket headers too large')
-
             if reason == 'closed' then
                 self:close(peer)
             end
@@ -68,9 +158,14 @@ function Transport:receive(peer)
             return
         end
 
-        local response = handshake.accept_upgrade(peer.incoming:sub(1, ending + 3), {})
-        assert(response, 'Invalid WebSocket upgrade')
+        local response, upgraded =
+            Http.respond(peer.incoming:sub(1, ending - 1), self.routes, self.host)
         self:queue(peer, response)
+        if not upgraded then
+            peer.closing = true
+            return
+        end
+
         peer.incoming = peer.incoming:sub(ending + 4)
         peer.upgraded = true
     end
@@ -82,6 +177,7 @@ function Transport:receive(peer)
             break
         end
 
+        assert(peer.incoming:byte(1) % 128 < 16, 'Unexpected frame extension')
         assert(masked, 'Client frames must be masked')
         peer.incoming = remaining
 
@@ -115,30 +211,48 @@ function Transport:receive(peer)
 end
 
 function Transport:update()
-    local accepted = self.listener:accept()
+    local now = socket.gettime()
 
-    if accepted then
-        local count = 0
-
-        for _ in pairs(self.peers) do
-            count = count + 1
+    for peer in pairs(self.peers) do
+        if not peer.authenticated and now >= peer.hello_deadline then
+            self:close(peer)
         end
+    end
 
-        if count >= 8 then
-            accepted:close()
-        else
-            accepted:settimeout(0)
-            self.peers[{ socket = accepted, incoming = '', outgoing = '', subscriptions = {} }] =
-                true
+    for _, listener in ipairs(self.listeners) do
+        local accepted = listener:accept()
+
+        if accepted then
+            local count = 0
+
+            for _ in pairs(self.peers) do
+                count = count + 1
+            end
+
+            if count >= 8 then
+                accepted:close()
+            else
+                accepted:settimeout(0)
+                self.peers[{
+                    socket = accepted,
+                    incoming = '',
+                    outgoing = '',
+                    subscriptions = {},
+                    hello_deadline = now + HELLO_TIMEOUT_SECONDS,
+                }] =
+                    true
+            end
         end
     end
 
     for peer in pairs(self.peers) do
-        local ok, problem = pcall(self.receive, self, peer)
+        if not peer.closing then
+            local ok, problem = pcall(self.receive, self, peer)
 
-        if not ok then
-            print('Stagehand connection closed: ' .. tostring(problem))
-            self:close(peer)
+            if not ok then
+                print('Stagehand connection closed: ' .. tostring(problem))
+                self:close(peer)
+            end
         end
     end
 
@@ -151,7 +265,7 @@ function Transport:flush()
             local sent, reason, last = peer.socket:send(peer.outgoing)
             peer.outgoing = peer.outgoing:sub((sent or last or 0) + 1)
 
-            if reason and reason ~= 'timeout' then
+            if (peer.closing and peer.outgoing == '') or (reason and reason ~= 'timeout') then
                 self:close(peer)
             end
         end

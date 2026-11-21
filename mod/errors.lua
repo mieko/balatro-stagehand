@@ -1,6 +1,12 @@
 local Errors = {}
+local installed
 
 function Errors.install()
+    if installed then
+        return
+    end
+
+    installed = true
     local previous = love.errhand
     function love.errhand(message)
         local fatal =

@@ -1,0 +1,9 @@
+{
+  "id": "balatro_stagehand",
+  "name": "Balatro Stagehand",
+  "author": ["mieko"],
+  "description": "Remote control for tests, bots and agents. Includes arbitrary Lua execution.",
+  "prefix": "stagehand",
+  "main_file": "smods.lua",
+  "dependencies": ["Lovely", "Balatro"]
+}

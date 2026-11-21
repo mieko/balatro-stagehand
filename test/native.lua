@@ -10,6 +10,9 @@ package.preload['balatro_stagehand.layout'] = assert(loadfile('mod/layout.lua'))
 package.preload['balatro_stagehand.run'] = assert(loadfile('mod/run.lua'))
 package.preload['balatro_stagehand.card_action'] = assert(loadfile('mod/card_action.lua'))
 package.preload['balatro_stagehand.commerce'] = assert(loadfile('mod/commerce.lua'))
+package.preload['balatro_stagehand.server_config'] = assert(loadfile('mod/server_config.lua'))
+package.preload['balatro_stagehand.status'] = assert(loadfile('mod/status.lua'))
+package.preload['balatro_stagehand.panel'] = assert(loadfile('mod/panel.lua'))
 local Actions = assert(loadfile('mod/actions.lua'))()
 local State = assert(loadfile('mod/state.lua'))()
 local Errors = assert(loadfile('mod/errors.lua'))()
@@ -66,6 +69,7 @@ local function fixture()
         end,
     } }
     local bridge = { tick = 4, instance = 'test', emitted = {} }
+
     function bridge:emit(_, _, value)
         self.emitted[#self.emitted + 1] = value
     end
@@ -74,12 +78,15 @@ local function fixture()
         ready = function()
             return true
         end,
+
         choices = function()
             return {}
         end,
+
         read = function()
             return { kind = 'SELECTING_HAND' }
         end,
+
         is_pack = function()
             return false
         end,
@@ -226,6 +233,7 @@ do
     fixture()
     local state = State.new()
     local card = { config = { center = { key = 'c_base' } }, base = {}, ability = {} }
+
     function card:generate_UIBox_ability_table()
         return {
             name = { { config = { text = ' King  of Spades ' } } },
@@ -355,6 +363,7 @@ do
     local actions, bridge, state = fixture()
     local advanced = 0
     local button = { config = { button = 'tut_next' }, states = { visible = true } }
+
     function button:click()
         advanced = advanced + 1
     end
@@ -433,6 +442,7 @@ do
         can_buy = function(node)
             node.config.button = available and 'buy_from_shop' or nil
         end,
+
         check_for_buy_space = function()
             return true
         end,
@@ -442,11 +452,13 @@ do
 
     for _, ref in ipairs({ 'first', 'second' }) do
         local card = { ref = ref, area = G.shop_jokers, children = {} }
+
         function card:click()
             self.highlighted = true
         end
 
         local node = { config = { func = 'can_buy' }, states = { visible = true } }
+
         function node:click()
             purchases = purchases + 1
             card.area = G.jokers
@@ -460,12 +472,15 @@ do
         find_card = function(_, ref)
             return cards[ref]
         end,
+
         card = function(_, card)
             return { ref = card.ref }
         end,
+
         is_pack = function()
             return false
         end,
+
         read = function()
             return { purchases = purchases }
         end,
@@ -492,26 +507,31 @@ do
     love.timer.getTime = function()
         return now
     end
+
     available = true
     purchases = 0
     for _, card in pairs(cards) do
         card.area = G.shop_jokers
     end
+
     job = commerce:begin({ 'first', 'second' }, 400)
     commerce:update(job)
 
     equal(job.step, nil)
+
     now = 0.4
     commerce:update(job)
     commerce:update(job)
     commerce:update(job)
 
     equal(purchases, 1)
+
     commerce:update(job)
     now = 0.799
     commerce:update(job)
 
     equal(purchases, 1)
+
     now = 0.8
     commerce:update(job)
     commerce:update(job)
@@ -525,11 +545,13 @@ do
     G.STATE, G.STATES.SHOP = 5, 5
     G.shop_jokers = {}
     local card = { area = G.shop_jokers, children = {} }
+
     function card:click()
         self.highlighted = true
     end
 
     local node = { config = { func = 'can_buy' }, states = { visible = true } }
+
     function node:click()
         error('must not purchase')
     end
@@ -539,6 +561,7 @@ do
         can_buy = function(button)
             button.config.button = 'buy_from_shop'
         end,
+
         check_for_buy_space = function()
             return false
         end,
@@ -548,6 +571,7 @@ do
         find_card = function()
             return card
         end,
+
         card = function()
             return { ref = 'offer' }
         end,
@@ -570,6 +594,7 @@ do
     local calls = 0
     local card = { area = G.consumeables, ability = { consumeable = {} }, children = {} }
     local button = { config = { func = 'can_use_consumeable' }, states = { visible = true } }
+
     function button:click()
         calls = calls + 1
         card.area = nil
@@ -590,9 +615,11 @@ do
         find_card = function()
             return card
         end,
+
         card = function()
             return { ref = 'owned' }
         end,
+
         is_pack = function()
             return false
         end,
@@ -616,6 +643,7 @@ do
     G.P_BLINDS = { visible_boss = { dollars = 5 } }
     G.STATES.BLIND_SELECT, G.STATE = 7, 7
     local pane = { UIRoot = { children = { { config = { text = 'Native target 987' } } } } }
+
     function pane:get_UIE_by_ID(id)
         if id == 'blind_desc' then
             return { config = { text = 'Native boss effect' } }
@@ -645,6 +673,7 @@ do
     local notices = { { kind = 'unlock', revealing = true }, { kind = 'unlock', text = 'Second' } }
     local current, clicks = 1, 0
     local button = { config = { button = 'continue_unlock' }, states = { visible = true } }
+
     function button:click()
         clicks = clicks + 1
         current = current + 1
@@ -656,15 +685,18 @@ do
                 and { { ref = 'advance', action = 'continue_unlock', enabled = true } }
             or {}
     end
+
     state.notice = function()
         return notices[current]
     end
+
     G.OVERLAY_MENU = {}
     actions.pending = { action = 'manual', kind = 'decision', tick = 1, started = 0, peer = {} }
     actions:update()
 
     equal(clicks, 0)
     equal(bridge.emitted[1].status, 'choice_required')
+
     bridge.emitted = {}
 
     actions.pending = {
@@ -697,6 +729,7 @@ do
     love.timer.getTime = function()
         return now
     end
+
     actions.execute = function()
         activated = activated + 1
     end
@@ -704,18 +737,22 @@ do
     actions:start('selectCards', {}, {})
 
     equal(activated, 1)
+
     actions.pending = nil
     actions:start('selectCards', { humanDelayMs = 400 }, {})
 
     equal(activated, 1)
+
     now = 10.399
     actions:update()
 
     equal(activated, 1)
+
     now = 10.4
     actions:update()
 
     equal(activated, 2)
+
     actions.pending = nil
 
     G.STATES.ROUND_EVAL = 3
@@ -724,6 +761,7 @@ do
     state.cash_out_button = function()
         return button
     end
+
     now = 50
     actions:start('cashOut', { humanDelayMs = 400 }, {})
     actions:update()
@@ -735,10 +773,12 @@ do
     actions:update()
 
     equal(activated, 2)
+
     now = 50.4
     actions:update()
 
     equal(activated, 3)
+
     actions.pending = nil
 
     -- Time spent deciding already satisfies the same screen's interval.
@@ -764,6 +804,7 @@ do
     actions:update()
 
     equal(activated, 4)
+
     now = 52.6
     actions:update()
 
@@ -777,9 +818,11 @@ do
     love.timer.getTime = function()
         return now
     end
+
     G.STATES.ROUND_EVAL, G.STATES.SHOP = 3, 4
     G.STATE = G.STATES.ROUND_EVAL
     local button = { config = { button = 'cash_out' }, states = { visible = true } }
+
     function button:click()
         clicks = clicks + 1
         G.STATE = G.STATES.SHOP
@@ -788,9 +831,11 @@ do
     state.cash_out_button = function()
         return button
     end
+
     state.read = function()
         return { kind = G.STATE == G.STATES.SHOP and 'SHOP' or 'ROUND_EVAL' }
     end
+
     actions:after_draw()
     now = 0.1
     local accepted = actions:start('cashOut', { humanDelayMs = 400 }, {})
@@ -805,6 +850,7 @@ do
 
     equal(clicks, 1)
     equal(#bridge.emitted, 0)
+
     bridge.tick = bridge.tick + 2
     actions:update()
 
@@ -826,6 +872,7 @@ do
     for i = 1, 32 do
         items[i] = 'offer' .. i
     end
+
     local accepted = actions:start('buy', { items = items, humanDelayMs = 5000 }, {})
 
     equal(accepted.completionTimeoutMs, 290000)
@@ -844,6 +891,7 @@ for _, mode in ipairs({
     love.timer.getTime = function()
         return now
     end
+
     G.STATE, G.STATES.SHOP = 5, 5
     G.TIMERS = { REAL = 1 }
     G.shop_jokers, G.jokers = {}, {}
@@ -855,35 +903,44 @@ for _, mode in ipairs({
     }
     local first = { ref = 'first', area = G.shop_jokers, highlighted = true, children = {} }
     local button = { config = { button = 'buy_from_shop' }, states = { visible = true } }
+
     function button:click()
         clicks = clicks + 1
         if mode == 'native_error' then
             error('native dispatch fault')
         end
+
         if mode == 'observation_error' then
             first.area = G.jokers
         end
     end
+
     if mode == 'validation_error' then
         button.last_clicked = 1
     end
+
     first.children.buy_button = { UIRoot = button }
     state.ready = function()
         if mode == 'readiness_error' and clicks > 0 then
             error('readiness projection fault')
         end
+
         return true
     end
+
     state.find_card = function()
         return first
     end
+
     state.card = function(_, card)
         return { ref = card.ref }
     end
+
     state.read = function()
         if mode == 'observation_error' and clicks > 0 then
             error('projection fault')
         end
+
         return { kind = 'SHOP', purchases = clicks }
     end
 

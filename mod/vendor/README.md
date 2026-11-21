@@ -9,4 +9,4 @@
   `e72ba0c9f5d8b8746fc306f6189a819dbb5cd0be`. MIT license included in the source.
 
 LuaSocket and bit operations come from the game's bundled LÖVE/LuaJIT runtime.
-Lovely is an ignored, project-local runtime dependency, not redistributed here.
+Lovely is installed separately; its binaries are not redistributed here.

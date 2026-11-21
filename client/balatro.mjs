@@ -1,11 +1,8 @@
-import { createRequire } from 'node:module';
+import { connect, RemoteObject, forwardMethods } from 'godot-stagehand';
 import { present } from './present.mjs';
 import { observationKey, observationBoundary, waitForObservation } from './spectator.mjs';
+export * from 'godot-stagehand';
 export { present } from './present.mjs';
-
-const { connect, RemoteObject, forwardMethods } = await import(
-  createRequire(import.meta.url).resolve('godot-stagehand')
-);
 
 const facades = new WeakMap();
 
@@ -323,7 +320,7 @@ export class Balatro extends RemoteObject {
   }
 
   async screenshot() {
-    const screen = await this.client.builtin('LoveScreen');
+    const screen = await this.client.root('LoveScreen');
 
     return screen.capture();
   }
@@ -363,7 +360,7 @@ export const balatroWrappers = {
   BalatroSceneTree: forwardMethods(['roots', 'inspect', 'children', 'query', 'click']),
 };
 
-export async function connectBalatro(url, options = {}) {
+export async function connectBalatro({ url = 'http://localhost:27121', ...options } = {}) {
   const client = await connect(url, {
     ...options,
     wrappers: { ...balatroWrappers, ...options.wrappers },
@@ -374,12 +371,16 @@ export async function connectBalatro(url, options = {}) {
       throw new Error('Balatro endpoint is unavailable');
     }
 
-    const runtime = await client.builtin('LoveRuntime');
-    await runtime.remote.subscribe('fatal', ({ value }) => {
-      const error = Object.assign(new Error(`Balatro stopped: ${value.message}`), { fatal: value });
-      client.fatalError = error;
-      client.emit('runtimeFatal', error);
-    });
+    const runtime = await client.findObject('LoveRuntime');
+    if (runtime) {
+      await runtime.remote.subscribe('fatal', ({ value }) => {
+        const error = Object.assign(new Error(`Balatro stopped: ${value.message}`), {
+          fatal: value,
+        });
+        client.fatalError = error;
+        client.emit('runtimeFatal', error);
+      });
+    }
     if (options.autoskip !== undefined) {
       await game.setAutoskip(options.autoskip);
     }

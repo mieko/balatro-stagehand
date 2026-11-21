@@ -12,6 +12,9 @@ for _, name in ipairs({
     'card_action',
     'commerce',
     'state',
+    'server_config',
+    'status',
+    'panel',
     'actions',
 }) do
     package.preload['balatro_stagehand.' .. name] = assert(loadfile('mod/' .. name .. '.lua'))
@@ -87,6 +90,7 @@ do
     G.STATE = G.STATES.ROUND_EVAL
     local continued = 0
     local button = { config = { button = 'exit_overlay_menu' }, states = { visible = true } }
+
     function button:click()
         continued = continued + 1
         G.OVERLAY_MENU = nil
@@ -166,6 +170,7 @@ do
         get_name = function()
             return 'Challenge Deck'
         end,
+
         generate_UI = function(_, _, _, _, challenge)
             assert(challenge == 'native_challenge')
 
@@ -413,6 +418,7 @@ do
     local actions = Actions.new(bridge, state)
     local clicked = 0
     local button = { config = { func = 'reroll_boss_button' }, states = { visible = true } }
+
     function button:click()
         clicked = clicked + 1
     end
@@ -447,6 +453,7 @@ do
     local state = fixture()
     local applied, events = false, {}
     local bridge = { tick = 1, instance = 'fixture' }
+
     function bridge:emit(_, _, result)
         events[#events + 1] = result
     end
@@ -484,6 +491,7 @@ do
 
         return { name = 'Native Joker', description = 'Native effect' }
     end
+
     local choices = { { action = 'continue_unlock', enabled = true, ref = 'advance' } }
     state.choices = function()
         return choices
@@ -538,6 +546,7 @@ do
         generate_UIBox_ability_table = function()
             return { name = 'Localized caption', main = 'Native description' }
         end,
+
         can_use_consumeable = function()
             return allowed
         end,
@@ -636,6 +645,30 @@ do
     G.GAME.hand_usage = nil
 
     assert(Run.results().scores.poker_hand == nil)
+end
+
+-- Semantic choices admit game controls while keeping mod administration local.
+do
+    local state = fixture()
+    local native = { config = { button = 'exit_overlay_menu' }, click = function() end }
+    local developer = {
+        config = { button = 'toggle_button' },
+        click = function()
+            error('administrative input')
+        end,
+    }
+    G.OVERLAY_MENU = {
+        children = {
+            native,
+            { config = { stagehand_local_only = true }, children = { developer } },
+        },
+    }
+
+    local choices = state:choices()
+
+    assert(#choices == 1 and choices[1].action == 'exit_overlay_menu')
+    assert(state.buttons[state:ref(native)] == native)
+    assert(state.buttons[state:ref(developer)] == nil)
 end
 
 print('Gameplay checks passed')

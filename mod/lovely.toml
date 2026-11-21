@@ -1,3 +1,185 @@
+# BEGIN MODULES (npm run update:manifest)
+[[patches]]
+[patches.module]
+source = "vendor/dkjson.lua"
+name = "dkjson"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "access_token.lua"
+name = "balatro_stagehand.access_token"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "actions.lua"
+name = "balatro_stagehand.actions"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "boot.lua"
+name = "balatro_stagehand.boot"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "bridge.lua"
+name = "balatro_stagehand.bridge"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "card_action.lua"
+name = "balatro_stagehand.card_action"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "commerce.lua"
+name = "balatro_stagehand.commerce"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "controls.lua"
+name = "balatro_stagehand.controls"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "errors.lua"
+name = "balatro_stagehand.errors"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "http.lua"
+name = "balatro_stagehand.http"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "layout.lua"
+name = "balatro_stagehand.layout"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "love_runtime.lua"
+name = "balatro_stagehand.love_runtime"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "love_screen.lua"
+name = "balatro_stagehand.love_screen"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "love_script.lua"
+name = "balatro_stagehand.love_script"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "native_data.lua"
+name = "balatro_stagehand.native_data"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "options.lua"
+name = "balatro_stagehand.options"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "panel.lua"
+name = "balatro_stagehand.panel"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "{{lovely_hack:patch_dir}}/resources.lua"
+name = "balatro_stagehand.resources"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "run.lua"
+name = "balatro_stagehand.run"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "scene_tree.lua"
+name = "balatro_stagehand.scene_tree"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "server_config.lua"
+name = "balatro_stagehand.server_config"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "state.lua"
+name = "balatro_stagehand.state"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "status.lua"
+name = "balatro_stagehand.status"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "text.lua"
+name = "balatro_stagehand.text"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "transport.lua"
+name = "balatro_stagehand.transport"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "version.lua"
+name = "balatro_stagehand.version"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "vendor/websocket/bit.lua"
+name = "websocket.bit"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "vendor/websocket/frame.lua"
+name = "websocket.frame"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "vendor/websocket/handshake.lua"
+name = "websocket.handshake"
+before = "main.lua"
+
+[[patches]]
+[patches.module]
+source = "vendor/websocket/tools.lua"
+name = "websocket.tools"
+before = "main.lua"
+# END MODULES
+
 [manifest]
 version = "1.0.0"
 priority = 0

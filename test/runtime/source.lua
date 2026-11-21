@@ -25,6 +25,7 @@ local function check_scripted_joker()
     G.jokers.cards = { joker }
     G.GAME.hands = { Pair = { played_this_round = 2 } }
     local context = { joker_main = true, cardarea = G.jokers, scoring_name = 'Pair' }
+
     assert(joker:calculate_joker(context).Xmult_mod == 3)
 
     local result = Script.evaluate({
@@ -39,6 +40,7 @@ end
     })
     assert(result == 5)
     assert(joker:calculate_joker(context).Xmult_mod == 5)
+
     print('NATIVE_SCRIPTED_JOKER_OK')
 end
 
@@ -53,6 +55,7 @@ local function check_tooltip_lifetimes()
 
         function object:remove()
             assert(active[self], 'Temporary tooltip objects must be released exactly once')
+
             active[self] = nil
         end
 
@@ -75,6 +78,7 @@ local function check_tooltip_lifetimes()
     for _ = 1, 1000 do
         local title = native_localize({ type = 'name', set = 'Joker', key = 'j_joker' })
         local tooltip = state:tooltip({ name = title, main = 'Native description' })
+
         assert(tooltip.name == G.P_CENTERS.j_joker.name)
     end
 
@@ -82,8 +86,10 @@ local function check_tooltip_lifetimes()
     for _ in pairs(active) do
         retained = retained + 1
     end
+
     assert(created == 1000)
     assert(retained == 0, 'Tooltip name objects retained after 1000 reads: ' .. retained)
+
     DynaText = original_text
     print('NATIVE_TOOLTIP_LIFETIME_OK ' .. created)
 end
@@ -262,6 +268,7 @@ local function check_chip_scope()
         assert(detail.chipsScope == 'card_bonus_before_edition')
         assert((not case.edition) or detail.edition.chips == 50)
     end
+
     print('NATIVE_CHIP_SCOPE_OK')
 end
 
@@ -286,6 +293,7 @@ local function check_aura_targeting()
 
     assert(not card:can_use_consumeable())
     assert(state:targeting(card).countSatisfied and state:targeting(card).requiresEditionless)
+
     print('NATIVE_TARGETING_OK')
 end
 
@@ -295,9 +303,11 @@ local function check_native_results()
     DynaText = function(config)
         return { config = config, string = config.string[1] }
     end
+
     localize = function(key, group)
         return group == 'poker_hands' and 'localized:' .. key or key
     end
+
     G.UIT = { R = 1, C = 2, O = 3, T = 4 }
     G.C.JOKER_GREY, G.C.WHITE = { 0.5, 0.5, 0.5, 1 }, { 1, 1, 1, 1 }
     G.GAME.pseudorandom.seed = 'PUBLIC42'
@@ -312,8 +322,10 @@ local function check_native_results()
         for _, child in ipairs(node.children or {}) do
             attach_children(child)
         end
+
         return node
     end
+
     local seed = attach_children(create_UIBox_round_scores_row('seed'))
     local poker = attach_children(create_UIBox_round_scores_row('poker_hand'))
     G.OVERLAY_MENU = { children = { { config = { id = 'from_game_won' } }, seed, poker } }
@@ -336,6 +348,7 @@ local function check_native_results()
     result = Run.results()
 
     assert(Text.read(poker):find(result.scores.poker_hand.name, 1, true))
+
     DynaText, localize = original_text, original_localize
     print('NATIVE_RESULTS_OK')
 end
@@ -366,12 +379,15 @@ local function check_native_sort()
     state.choices = function()
         return {}
     end
+
     state.ready = function()
         return not G.CONTROLLER.locked
     end
+
     state.read = function()
         return { hand = state:cards(G.hand) }
     end
+
     G.TIMERS = { REAL = 1 }
     G.C.SUITS = {}
     local first, second = face_down_card('S_2', 1), face_down_card('H_A', 2)
@@ -402,7 +418,9 @@ local function check_native_sort()
         { by = 'suit', first = first_ref, second = second_ref },
     }) do
         local accepted = actions:start('sortHand', { by = example.by }, {})
+
         assert(actions.pending, actions.latest and actions.latest.error)
+
         bridge.tick = bridge.tick + 2
         actions:update()
         local result = actions.latest
@@ -419,13 +437,19 @@ local function check_native_sort()
     end
 
     assert(clicks == 3)
+
     actions:start('sortHand', { by = 'hidden-rank' }, {})
+
     assert(actions.latest.status == 'failed' and clicks == 3)
+
     nodes[1].states.visible = false
     actions:start('sortHand', { by = 'rank' }, {})
+
     assert(actions.latest.status == 'failed' and clicks == 3)
+
     G.CONTROLLER.locked = true
     actions:start('sortHand', { by = 'suit' }, {})
+
     assert(actions.latest.status == 'failed' and clicks == 3)
 
     print('NATIVE_SORT_OK')
@@ -451,8 +475,10 @@ local function check_native_tree()
     local clicked = 0
     G.FUNCS.tree_fixture = function(control)
         assert(control == button)
+
         clicked = clicked + 1
     end
+
     play_sound = function() end
     local tree = Tree.new(state)
     local found = tree:query({ id = 'native-tree' }).nodes
@@ -463,7 +489,9 @@ local function check_native_tree()
     assert(tree:click({ node = found[1].node }).clicked)
     assert(clicked == 1 and button.last_clicked == 2)
     assert(not pcall(tree.click, tree, { node = found[1].node }) and clicked == 1)
+
     G.I.UIBOX = {}
+
     assert(not pcall(tree.inspect, tree, { node = found[1].node }))
 
     print('NATIVE_TREE_OK')
@@ -479,12 +507,16 @@ function love.load()
         'layout',
         'card_action',
         'commerce',
+        'server_config',
+        'status',
+        'panel',
         'actions',
         'text',
         'run',
         'state',
         'scene_tree',
         'love_script',
+        'native_data',
     }) do
         package.preload['balatro_stagehand.' .. name] =
             assert(love.filesystem.load('mod/' .. name .. '.lua'))
@@ -495,6 +527,12 @@ function love.load()
     end
 
     package.preload.dkjson = assert(love.filesystem.load('mod/vendor/dkjson.lua'))
+    local native_data = require('balatro_stagehand.native_data').parse(
+        assert(love.filesystem.read('native/functions/UI_definitions.lua'))
+    )
+    assert(#native_data.gameSpeeds > 0 and native_data.rarityKeys[1] == 'k_common')
+
+    print('NATIVE_OPTIONS_OK')
     check_tooltip_lifetimes()
     fixture_game()
     check_native_sort()
@@ -586,9 +624,11 @@ function love.load()
                     find_card = function()
                         return card
                     end,
+
                     card = function()
                         return {}
                     end,
+
                     is_pack = function()
                         return false
                     end,
@@ -643,9 +683,11 @@ function love.load()
         find_card = function()
             return card
         end,
+
         card = function()
             return {}
         end,
+
         is_pack = function()
             return false
         end,

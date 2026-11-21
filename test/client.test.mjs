@@ -5,9 +5,15 @@ import { connectBalatro } from '../client/balatro.mjs';
 
 async function server(
   t,
-  { fatal = false, pending = false, completionTimeoutMs, withholdFatalReceipt = false } = {},
+  {
+    fatal = false,
+    pending = false,
+    completionTimeoutMs,
+    withholdFatalReceipt = false,
+    developerMode = true,
+  } = {},
 ) {
-  const listener = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+  const listener = new WebSocketServer({ host: '127.0.0.1', port: 0, path: '/rpc' });
   t.after(async () => {
     for (const peer of listener.clients) {
       peer.terminate();
@@ -21,8 +27,9 @@ async function server(
     { id: 'runtime', label: 'LoveRuntime', kind: 'LoveRuntime' },
     { id: 'tree', label: 'BalatroSceneTree', kind: 'BalatroSceneTree' },
     { id: 'screen', label: 'LoveScreen', kind: 'LoveScreen' },
-  ];
+  ].filter((object) => developerMode || object.kind === 'Balatro');
   const calls = [];
+  const hellos = [];
   let subscription = 0;
 
   listener.on('connection', (peer) => {
@@ -53,6 +60,7 @@ async function server(
       const { id, method, params } = JSON.parse(bytes);
       let result;
       if (method === 'session.hello') {
+        hellos.push(params);
         result = { protocol: 1, objects };
       } else if (method === 'objects.list') {
         result = objects;
@@ -107,16 +115,42 @@ async function server(
         ((method === 'object.call' && fatal) || method === 'object.unsubscribe')
       )
         return;
+
       peer.send(JSON.stringify({ jsonrpc: '2.0', id, result }));
     });
   });
-  return { url: `ws://127.0.0.1:${listener.address().port}`, calls };
+
+  return { url: `http://127.0.0.1:${listener.address().port}`, calls, hellos };
 }
+
+test('default connection uses the local endpoint without a token; explicit tokens still pass through', async (t) => {
+  const fixture = await server(t);
+  let requestedUrl;
+
+  class LocalSocket extends WebSocket {
+    constructor(url) {
+      requestedUrl = url;
+      super(new URL('/rpc', fixture.url.replace('http:', 'ws:')));
+    }
+  }
+
+  const local = await connectBalatro({ WebSocket: LocalSocket });
+  t.after(() => local.close());
+
+  assert.equal(requestedUrl, 'ws://localhost:27121/rpc');
+  assert.deepEqual(fixture.hellos, [{ protocol: 1 }]);
+
+  const configured = await connectBalatro({ url: fixture.url, token: 'configured', WebSocket });
+  t.after(() => configured.close());
+
+  assert.deepEqual(fixture.hellos[1], { token: 'configured', protocol: 1 });
+});
 
 test('playHand retains the optional phase order and handles immediate completion', async (t) => {
   const fixture = await server(t);
-  const game = await connectBalatro(fixture.url, { token: 'test', WebSocket });
+  const game = await connectBalatro({ url: fixture.url, token: 'test', WebSocket });
   t.after(() => game.close());
+
   const card = { ref: 'card' };
   const order = [{ ref: 'blueprint' }, { ref: 'mime' }];
 
@@ -133,13 +167,19 @@ test('playHand retains the optional phase order and handles immediate completion
 
 test('autoskip is off unless selected and each connection has independent settings', async (t) => {
   const fixture = await server(t);
-  const manual = await connectBalatro(fixture.url, { token: 'test', WebSocket });
-  const automatic = await connectBalatro(fixture.url, { token: 'test', WebSocket, autoskip: true });
+  const manual = await connectBalatro({ url: fixture.url, token: 'test', WebSocket });
+  const automatic = await connectBalatro({
+    url: fixture.url,
+    token: 'test',
+    WebSocket,
+    autoskip: true,
+  });
   t.after(() => manual.close());
   t.after(() => automatic.close());
 
   assert.deepEqual(await manual.settings(), { autoskip: false, discoveryLabels: false });
   assert.deepEqual(await automatic.settings(), { autoskip: true, discoveryLabels: false });
+
   await automatic.setAutoskip(false);
 
   assert.deepEqual(await automatic.settings(), { autoskip: false, discoveryLabels: false });
@@ -147,14 +187,16 @@ test('autoskip is off unless selected and each connection has independent settin
 
 test('discovery labels are a queryable session preference used by ordinary presentation', async (t) => {
   const fixture = await server(t);
-  const normal = await connectBalatro(fixture.url, { token: 'test', WebSocket });
-  const onboarding = await connectBalatro(fixture.url, {
+  const normal = await connectBalatro({ url: fixture.url, token: 'test', WebSocket });
+  const onboarding = await connectBalatro({
+    url: fixture.url,
     token: 'test',
     WebSocket,
     discoveryLabels: true,
   });
   t.after(() => normal.close());
   t.after(() => onboarding.close());
+
   const state = {
     jokers: [{ ref: 'j', name: 'Joker', discoveryLabel: 'Non découvert', description: '+4 Mult' }],
   };
@@ -175,7 +217,8 @@ test('discovery labels are a queryable session preference used by ordinary prese
   await normal.setAutoskip(true);
 
   assert.deepEqual(await normal.settings(), { autoskip: true, discoveryLabels: true });
-  const fresh = await connectBalatro(fixture.url, { token: 'test', WebSocket });
+
+  const fresh = await connectBalatro({ url: fixture.url, token: 'test', WebSocket });
   t.after(() => fresh.close());
 
   assert.deepEqual(await fresh.settings(), { autoskip: false, discoveryLabels: false });
@@ -183,7 +226,7 @@ test('discovery labels are a queryable session preference used by ordinary prese
 
 test('ordinary play does not request any phase-specific Joker decision', async (t) => {
   const fixture = await server(t);
-  const game = await connectBalatro(fixture.url, { token: 'test', WebSocket });
+  const game = await connectBalatro({ url: fixture.url, token: 'test', WebSocket });
   t.after(() => game.close());
 
   await game.playHand([{ ref: 'card' }]);
@@ -193,7 +236,7 @@ test('ordinary play does not request any phase-specific Joker decision', async (
 
 test('hand sorting submits a native sort mode and waits for its completion', async (t) => {
   const fixture = await server(t);
-  const game = await connectBalatro(fixture.url, { token: 'test', WebSocket });
+  const game = await connectBalatro({ url: fixture.url, token: 'test', WebSocket });
   t.after(() => game.close());
 
   const result = await game.sortHand('suit');
@@ -205,9 +248,9 @@ test('hand sorting submits a native sort mode and waits for its completion', asy
 
 test('BalatroSceneTree uses wrapped-root lookup independently of gameplay', async (t) => {
   const fixture = await server(t);
-  const game = await connectBalatro(fixture.url, { token: 'test', WebSocket });
+  const game = await connectBalatro({ url: fixture.url, token: 'test', WebSocket });
   t.after(() => game.close());
-  const tree = await game.client.builtin('BalatroSceneTree');
+  const tree = await game.client.root('BalatroSceneTree');
 
   const found = await tree.query({ button: 'new_native_action' });
   const clicked = await tree.click({ node: found.nodes[0].node });
@@ -220,9 +263,9 @@ test('BalatroSceneTree uses wrapped-root lookup independently of gameplay', asyn
 
 test('screen capture waits for its own image and matches the standard decoded JS result', async (t) => {
   const fixture = await server(t);
-  const game = await connectBalatro(fixture.url, { token: 'test', WebSocket });
+  const game = await connectBalatro({ url: fixture.url, token: 'test', WebSocket });
   t.after(() => game.close());
-  const screen = await game.client.builtin('LoveScreen');
+  const screen = await game.client.root('LoveScreen');
 
   const shot = await screen.capture();
   const convenience = await game.screenshot();
@@ -236,38 +279,43 @@ test('screen capture waits for its own image and matches the standard decoded JS
 
 test('a native fatal error interrupts the wait with its traceback and stops queued input', async (t) => {
   const fixture = await server(t, { fatal: true });
-  const game = await connectBalatro(fixture.url, { token: 'test', WebSocket });
+  const game = await connectBalatro({ url: fixture.url, token: 'test', WebSocket });
   t.after(() => game.close());
   const first = game.playHand([{ ref: 'card' }]);
   const queued = game.discard([{ ref: 'other' }]);
 
   await assert.rejects(first, (error) => error.fatal.traceback === 'native trace');
   await assert.rejects(queued, /Balatro stopped: native fault/);
+
   assert.equal(fixture.calls.length, 1);
 
   game.resumeQueue();
 
   await assert.rejects(game.selectBlind(), /Balatro stopped/);
   await assert.rejects(game.state(), (error) => error.fatal.traceback === 'native trace');
+
   assert.equal(fixture.calls.length, 1);
 });
 
 test('human delay uses the StS2 call shape, defaults to zero and travels with game work', async (t) => {
   const fixture = await server(t);
-  const game = await connectBalatro(fixture.url, { token: 'test', WebSocket });
+  const game = await connectBalatro({ url: fixture.url, token: 'test', WebSocket });
   t.after(() => game.close());
 
   await game.cashOut();
+
   assert.equal(fixture.calls.findLast((call) => call.method === 'cashOut').params.humanDelayMs, 0);
 
   game.setHumanDelay(400);
   await game.cashOut();
+
   assert.equal(
     fixture.calls.findLast((call) => call.method === 'cashOut').params.humanDelayMs,
     400,
   );
 
   await game.state();
+
   assert.deepEqual(fixture.calls.findLast((call) => call.method === 'state').params, {});
   assert.throws(() => game.setHumanDelay(-1), RangeError);
   assert.throws(() => game.setHumanDelay(Infinity), RangeError);
@@ -275,15 +323,17 @@ test('human delay uses the StS2 call shape, defaults to zero and travels with ga
 
   game.setHumanDelay();
   await game.cashOut();
+
   assert.equal(fixture.calls.findLast((call) => call.method === 'cashOut').params.humanDelayMs, 0);
 });
 
 test('gameplay waiting uses the accepted service allowance without retrying work', async (t) => {
   const fixture = await server(t, { pending: true, completionTimeoutMs: 15 });
-  const game = await connectBalatro(fixture.url, { token: 'test', WebSocket });
+  const game = await connectBalatro({ url: fixture.url, token: 'test', WebSocket });
   t.after(() => game.close());
 
   await assert.rejects(game.cashOut(), /Game wait timed out; do not replay/);
+
   assert.equal(fixture.calls.filter((call) => call.method === 'cashOut').length, 1);
 });
 
@@ -292,7 +342,7 @@ test(
   { timeout: 1000 },
   async (t) => {
     const fixture = await server(t, { fatal: true, withholdFatalReceipt: true });
-    const game = await connectBalatro(fixture.url, { token: 'test', WebSocket });
+    const game = await connectBalatro({ url: fixture.url, token: 'test', WebSocket });
     t.after(() => game.close());
     const first = game.playHand([]);
     const queued = game.cashOut();
@@ -302,6 +352,7 @@ test(
         assert.rejects(result, (error) => {
           assert.match(error.message, /native fault/);
           assert.equal(error.fatal.traceback, 'native trace');
+
           return true;
         }),
       ),
@@ -310,3 +361,14 @@ test(
     assert.equal(fixture.calls.filter((call) => call.method === 'cashOut').length, 0);
   },
 );
+
+test('semantic-only games support ordinary calls without developer endpoints', async (t) => {
+  const fixture = await server(t, { developerMode: false });
+  const game = await connectBalatro({ url: fixture.url, WebSocket });
+  t.after(() => game.close());
+
+  const result = await game.playHand([{ ref: 'card' }]);
+
+  assert.equal(result.state.score, 42);
+  assert.equal(await game.client.findObject('Balatro'), game);
+});

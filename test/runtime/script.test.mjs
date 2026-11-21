@@ -6,9 +6,9 @@ import { launchFixture } from './fixture.mjs';
 test('LoveScript evaluates through the named wrapper and direct RPC without driving gameplay', async (t) => {
   const fixture = await launchFixture(t);
   const port = Number((await fixture.waitFor(/FIXTURE_READY (\d+)/))[1]);
-  const game = await connectBalatro(`ws://127.0.0.1:${port}`, { token: 'fixture-only' });
+  const game = await connectBalatro({ url: `http://127.0.0.1:${port}`, token: 'fixture-only' });
   t.after(() => game.close());
-  const script = await game.client.builtin('LoveScript');
+  const script = await game.client.root('LoveScript');
   const before = await game.state();
   const source = `
 function evaluate(bindings)
@@ -43,9 +43,9 @@ end`;
 test('oversized escaped evaluation results fail without losing the connection or repeating writes', async (t) => {
   const fixture = await launchFixture(t);
   const port = Number((await fixture.waitFor(/FIXTURE_READY (\d+)/))[1]);
-  const game = await connectBalatro(`ws://127.0.0.1:${port}`, { token: 'fixture-only' });
+  const game = await connectBalatro({ url: `http://127.0.0.1:${port}`, token: 'fixture-only' });
   t.after(() => game.close());
-  const script = await game.client.builtin('LoveScript');
+  const script = await game.client.root('LoveScript');
 
   await assert.rejects(
     script.evaluate({
@@ -66,9 +66,9 @@ end`,
 test('binary Lua values and keys fail without sending invalid WebSocket text', async (t) => {
   const fixture = await launchFixture(t);
   const port = Number((await fixture.waitFor(/FIXTURE_READY (\d+)/))[1]);
-  const game = await connectBalatro(`ws://127.0.0.1:${port}`, { token: 'fixture-only' });
+  const game = await connectBalatro({ url: `http://127.0.0.1:${port}`, token: 'fixture-only' });
   t.after(() => game.close());
-  const script = await game.client.builtin('LoveScript');
+  const script = await game.client.root('LoveScript');
 
   for (const expression of ['string.char(255)', '{[string.char(255)] = "binary key"}']) {
     await assert.rejects(

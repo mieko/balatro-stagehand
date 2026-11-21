@@ -3,6 +3,7 @@ local Commerce = require('balatro_stagehand.commerce')
 local CardAction = require('balatro_stagehand.card_action')
 local Controls = require('balatro_stagehand.controls')
 local Layout = require('balatro_stagehand.layout')
+local Panel = require('balatro_stagehand.panel')
 local Run = require('balatro_stagehand.run')
 local Actions = {}
 Actions.__index = Actions
@@ -211,6 +212,10 @@ function Actions:execute(name, params)
 end
 
 function Actions:start(name, params, peer)
+    if name ~= 'decision' and Panel.has_pending() then
+        Bridge.fail(Bridge.INPUT_CONFLICT, 'Finish editing Stagehand settings in Balatro')
+    end
+
     if self.pending then
         Bridge.fail(Bridge.INPUT_CONFLICT, 'Another game action is active')
     end
@@ -357,6 +362,10 @@ function Actions:advance()
 
     if love.timer.getTime() - action.started > (action.timeout_seconds or 120) then
         self:finish('unconfirmed', 'Game did not settle; do not replay automatically')
+        return
+    end
+
+    if action.kind ~= 'decision' and Panel.has_pending() then
         return
     end
 

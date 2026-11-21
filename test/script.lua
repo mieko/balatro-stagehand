@@ -13,6 +13,7 @@ local json = require('dkjson')
 
 local function rejected(source, code, message)
     local ok, problem = pcall(Script.evaluate, { source = source })
+
     assert(not ok, 'Expected evaluation to fail')
     assert(problem.code == code, tostring(problem.code))
     assert(problem.message:find(message, 1, true), problem.message)
@@ -28,6 +29,7 @@ end
         bindings = { value = 21, empty = Bridge.array() },
     }
     local result = Script.evaluate(params)
+
     assert(result.answer == 42 and result.flag == false)
     assert(json.encode(result.empty) == '[]')
     assert(_G.evaluate == nil, 'Entry point must not leak into shared globals')

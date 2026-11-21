@@ -370,6 +370,10 @@ function State:choices()
 
         seen[node] = true
 
+        if node.config and node.config.stagehand_local_only then
+            return
+        end
+
         if node.states and node.states.visible == false then
             return
         end

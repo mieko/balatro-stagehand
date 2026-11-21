@@ -1,28 +1,37 @@
 {
   "name": "balatro-stagehand",
+  "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "exports": "./client/balatro.mjs",
   "dependencies": {
+    "@zip.js/zip.js": "2.25.0",
+    "esbuild": "0.28.2",
     "godot-stagehand": "file:./stagehand",
+    "tar": "7.5.23",
     "ws": "^8.23.0"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs && npm run test:setup",
+    "test": "node --test test/*.test.mjs",
     "test:runtime": "node --test test/runtime/*.test.mjs",
-    "prepare:game": "python3 tools/prepare.py",
-    "launch": "python3 tools/launch.py",
-    "setup:format": "python3 -m venv .local/format-tools && .local/format-tools/bin/python -m pip install -r tools/requirements-dev.txt",
-    "format:lua": "stylua --verify --glob '**/*.lua' --glob '!mod/vendor/**' mod test",
-    "format:js": "prettier --write \"client/**/*.mjs\" \"test/**/*.mjs\" \"*.json\"",
-    "format:python": ".local/format-tools/bin/ruff format tools test",
+    "prepare:game": "node tools/prepare.mjs",
+    "launch": "node tools/launch.mjs",
+    "format:lua": "stylua --verify --glob \"**/*.lua\" --glob \"!mod/vendor/**\" mod test",
+    "format:js": "prettier --write \"client/**/*.mjs\" \"test/**/*.mjs\" \"tools/**/*.mjs\" \"*.json\" \".github/**/*.yml\" \"mod/*.json\"",
     "format:docs": "prettier --write \"*.md\" \"docs/**/*.md\" \"mod/vendor/README.md\"",
-    "format": "npm run format:lua && npm run format:js && npm run format:python && npm run format:docs",
-    "format:check": "stylua --check --verify --glob '**/*.lua' --glob '!mod/vendor/**' mod test && prettier --check \"client/**/*.mjs\" \"test/**/*.mjs\" \"*.json\" \"*.md\" \"docs/**/*.md\" \"mod/vendor/README.md\" && .local/format-tools/bin/ruff format --check tools test",
-    "test:setup": "python3 -m unittest discover -s test -p '*_test.py'"
+    "format": "npm run format:lua && npm run format:js && npm run format:docs",
+    "format:check": "stylua --check --verify --glob \"**/*.lua\" --glob \"!mod/vendor/**\" mod test && prettier --check \"client/**/*.mjs\" \"test/**/*.mjs\" \"tools/**/*.mjs\" \"*.json\" \"*.md\" \"docs/**/*.md\" \"mod/vendor/README.md\" \".github/**/*.yml\" \"mod/*.json\"",
+    "test:setup": "node --test test/setup.test.mjs",
+    "fetch:lovely": "node tools/fetch-lovely.mjs",
+    "build:mod": "node tools/build-mod.mjs",
+    "update:manifest": "node tools/build-mod.mjs --manifest"
   },
   "devDependencies": {
     "@johnnymorganz/stylua-bin": "2.6.0",
     "prettier": "3.10.1"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

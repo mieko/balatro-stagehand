@@ -1,44 +1,59 @@
 # Security
 
-**Anyone who can authenticate to the running mod can execute arbitrary Lua in
-the Balatro process.** Think of an attached browser DevTools console. You can
-inspect live objects, change them and watch the running game respond. Clients
-speak Stagehand's JSON-RPC protocol over WebSocket.
+**The default listener lets local programs control Balatro without authentication.**
+Developer Mode adds arbitrary Lua execution, like an attached DevTools console.
+Enable Developer Mode only when you want that access.
 
 ## Gameplay and Lua access
 
-The `Balatro` endpoint reports player-visible information. For example, a
-face-down card stays opaque and the deck view omits draw order. A gameplay
-command such as `playHand` uses the game's native eligibility checks.
+The `Balatro` endpoint reports player-visible information: face-down cards stay
+opaque and the deck view omits draw order. Gameplay commands use native
+eligibility checks.
 
-The mod also registers `LoveScript` by default. Its `evaluate` operation runs
-Lua with access to the game's globals and native libraries, including `G`,
-`love`, `require` and `_G`. Any authenticated client can call it directly. A spectator uses the same
-credentials and can switch to the debugger at any time. Scripts can inspect
-hidden cards, change scores or saves, read or write files and start
-programs with the game's operating-system permissions. The gameplay view offers
-no anti-cheat protection against such a client. See the [Lua call and result
-format](api.md#runtime-lua).
+With Developer Mode off (the default), only `Registry` and `Balatro` are registered.
+Stagehand's administrative controls are excluded from semantic gameplay choices.
+Developer Mode adds `BalatroSceneTree`, `LoveScript`, `LoveInput`, `LoveScreen` and
+`LoveRuntime`. Only enable it for clients you trust with the game's process permissions.
 
-## Connection and profile
+`LoveScript.evaluate` can access
+`G`, `love`, `require`, `_G` and native libraries. It can inspect hidden cards,
+change scores or saves, read and write files, and start programs with the game's
+operating-system permissions. Spectators have the same access as drivers.
+The gameplay view is not anti-cheat enforcement. See [runtime Lua](game.md#runtime-lua).
 
-The mod requires a nonempty `STAGEHAND_TOKEN`. The launcher chooses a loopback
-port, generates a new token and writes both to `.local/session.json`.
-`connectLocal()` reads that file. Keep it private. Loopback controls which
-machines can reach the listener, and the token controls who can connect.
-Neither restricts what an authenticated script can do.
+## Listener and authentication
 
-The separate app and LÖVE save identity keep ordinary game progress separate
-from the Steam profile. They place no restriction on files a script can open.
-Plain `ws://` carries the token and traffic unencrypted. For a trusted remote
-client, use an encrypted tunnel to the loopback listener.
+Normal installation binds IPv4/IPv6 loopback on port 27121 without requiring a token.
+**Allow Remote Connections** opens all network interfaces and requires an access
+token. Every authenticated client can control the game, including running arbitrary
+Lua when Developer Mode is enabled.
+
+**Require Access Token** authenticates every connection with the launch token available
+from **Copy Access Token**. Its source is `STAGEHAND_TOKEN`, or operating-system randomness
+when an authenticated listener starts without a supplied token.
+The generated token changes on the next game launch and is never saved to the config
+file. Applying connection settings closes existing connections. Driver and observer connections
+have the same permissions.
+
+Discovery at `/`, the client and both API references are public to anyone who
+can reach the listener. Those routes serve bundled files and connection instructions.
+RPC runs at `/rpc`. WebSocket upgrades carrying an `Origin` header are rejected
+with or without a token. Loopback listening also checks the HTTP `Host` header
+for a loopback authority. Plain HTTP and WebSocket traffic is unencrypted. Use
+an encrypted tunnel across untrusted networks.
+
+The optional development launcher generates a fresh token and writes it to
+`.local/session.json`; `connectLocal()` reads that file. Keep it private. Its
+separate app and save identity protect ordinary progress from accidental mixing,
+not from scripts that deliberately access other files.
 
 ## Timeouts and changes
 
-Scripts execute synchronously on the game thread. A script that blocks can
-freeze Balatro and the listener. A timeout cannot interrupt it or undo changes.
-A script may change the game even if encoding its return value fails.
+Scripts run synchronously on the game thread. A blocking script can freeze both
+the game and listener. A timeout cannot interrupt execution or undo changes, and
+a script may change the game even if encoding its result fails.
 
-A gameplay command may also finish after a timeout or disconnect. Read
-`state()` and `recover()` before sending another command. Never automatically
-replay an uncertain action. See [command recovery](api.md#settings-and-recovery).
+Gameplay commands may finish after a timeout or disconnect. Read `state()` and
+`recover()` before sending more input; never automatically replay an uncertain
+action. Disabling or restarting the service discards pending tracking and unissued
+steps, without rolling back native changes. See [command recovery](game.md#settings-and-recovery).

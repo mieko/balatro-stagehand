@@ -7,6 +7,7 @@ end
 package.preload['balatro_stagehand.transport'] = function()
     return {}
 end
+
 local Tree = require('balatro_stagehand.scene_tree')
 local Runtime = require('balatro_stagehand.love_runtime')
 local json = require('dkjson')
@@ -62,18 +63,23 @@ local tree = Tree.new(state)
 
 -- Unknown native widgets are discoverable without a semantic binding or captions.
 assert(#tree:roots() == 2)
+
 local found = tree:query({ id = 'future-button' })
+
 assert(#found.nodes == 1 and found.nodes[1].button == 'future_action')
 assert(found.nodes[1].enabled and found.nodes[1].node == state:ref(button))
 assert(tree:query({ text = 'new game feature' }).nodes[1].parent == state:ref(button))
 assert(#tree:query({ root = state:ref(label), id = 'future-button' }).nodes == 0)
+
 local breadth = tree:query({ root = state:ref(box) }).nodes
+
 assert(breadth[1].node == state:ref(box) and breadth[2].node == state:ref(button))
 assert(breadth[3].node == state:ref(label))
 assert(#tree:query({ text = 'Hidden offer' }).nodes == 0)
 assert(not json.encode(tree:query({})):find('SECRET', 1, true))
 
 local children = tree:children({ node = state:ref(box), limit = 1 })
+
 assert(#children.nodes == 1 and not children.more)
 assert(tree:inspect({ node = state:ref(back) }).hidden)
 assert(#tree:children({ node = state:ref(back) }).nodes == 0)
@@ -82,22 +88,34 @@ assert(#tree:query({ text = 'Hidden card identity' }).nodes == 0)
 -- Pagination is explicit, and traversal follows only native scene relationships.
 local first = tree:query({ limit = 1 })
 local second = tree:query({ offset = 1, limit = 1 })
+
 assert(first.more and first.nodes[1].node ~= second.nodes[1].node)
+
 box.children[#box.children + 1] = box
+
 assert(#tree:query({ id = 'future-button' }).nodes == 1)
 
 local clicked = tree:click({ node = state:ref(button) })
+
 assert(clicked.clicked and clicks == 1)
+
 button.disable_button = true
+
 assert(not pcall(tree.click, tree, { node = state:ref(button) }) and clicks == 1)
+
 button.disable_button = nil
 G.CONTROLLER.locked = true
+
 assert(not pcall(tree.click, tree, { node = state:ref(button) }) and clicks == 1)
+
 G.CONTROLLER.locked = false
 box.states.visible = false
+
 assert(not pcall(tree.inspect, tree, { node = state:ref(button) }))
+
 box.states.visible = true
 G.I.UIBOX = {}
+
 assert(not pcall(tree.click, tree, { node = state:ref(button) }) and clicks == 1)
 assert(not pcall(tree.query, tree, { limit = 0 }))
 
@@ -108,13 +126,16 @@ box.children = {
     ['11'] = node({ id = 'label' }),
 }
 local ordered = tree:children({ node = state:ref(box) }).nodes
+
 assert(ordered[1].id == 'two' and ordered[2].id == 'ten' and ordered[3].id == 'label')
 
 local text = node({ text = string.rep('x', 2047) .. '界' })
 box.children = { text }
 local detail = tree:inspect({ node = state:ref(text) })
+
 assert(detail.text == string.rep('x', 2047) and detail.text_truncated)
 assert(not pcall(tree.click, tree, { node = state:ref(text) }))
+
 local descendant = text
 
 for _ = 1, 65 do
@@ -144,6 +165,7 @@ love = {
     },
 }
 local info = Runtime.info()
+
 assert(
     info.engine.major == 11 and info.engine.name == 'LÖVE' and info.save_directory == '/fixture'
 )
@@ -157,12 +179,15 @@ love.graphics = {
     isActive = function()
         return true
     end,
+
     getDimensions = function()
         return 320, 240
     end,
+
     getPixelDimensions = function()
         return 640, 480
     end,
+
     captureScreenshot = function(callback)
         callbacks[#callbacks + 1] = callback
     end,
@@ -177,25 +202,34 @@ local screen = Screen.new({
     clock = function()
         return { process_frame = 5 }
     end,
+
     emit = function(_, _, _, image)
         emitted[#emitted + 1] = image
     end,
 })
 local dimensions = screen:dimensions({})
+
 assert(dimensions.logical_size.x == 320 and dimensions.texture_size.x == 640)
+
 local accepted = screen:capture({})
+
 assert(accepted.capture == screen:capture({}).capture)
 assert(#callbacks == 0 and screen.image == nil)
+
 screen:after_draw()
 local next_capture = screen:capture({})
+
 assert(next_capture.capture ~= accepted.capture)
+
 callbacks[1]({
     getWidth = function()
         return 640
     end,
+
     getHeight = function()
         return 480
     end,
+
     encode = function()
         return {
             getString = function()
@@ -208,9 +242,11 @@ assert(emitted[1].capture == accepted.capture and emitted[1].base64 == 'encoded-
 assert(emitted[1].phase == 'next_rendered_image' and emitted[1].clock.process_frame == 5)
 assert(screen.pending == next_capture.capture)
 assert(not pcall(screen.capture, screen, { viewport = 'not-a-love-viewport' }))
+
 love.graphics.isActive = function()
     return false
 end
+
 assert(not pcall(screen.capture, screen, {}))
 
 print('Scene tree checks passed')

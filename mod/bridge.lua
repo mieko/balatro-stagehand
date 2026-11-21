@@ -24,25 +24,26 @@ function Bridge.array(values)
 end
 
 function Bridge.new(options)
+    local token = options.token
+    assert(
+        token == nil or (type(token) == 'string' and token ~= ''),
+        'token must be a nonempty string or nil'
+    )
+    local host = options.host or 'localhost'
     local self = setmetatable({
-        token = assert(options.token),
+        token = token,
         instance = assert(options.instance),
         roots = {},
         subscription = 0,
         tick = 0,
     }, Bridge)
-    self.transport = Transport.new(
-        options.host or '127.0.0.1',
-        options.port or 0,
-        function(peer, bytes)
-            self:message(peer, bytes)
-        end,
-        function(peer)
-            if self.on_close then
-                self.on_close(peer)
-            end
+    self.transport = Transport.new(host, options.port or 0, function(peer, bytes)
+        self:message(peer, bytes)
+    end, function(peer)
+        if self.on_close then
+            self.on_close(peer)
         end
-    )
+    end, token ~= nil, options.assets)
 
     self:register('Registry', 'Registry', {
         list = function()
@@ -117,7 +118,7 @@ end
 
 function Bridge:dispatch(peer, method, params)
     if method == 'session.hello' then
-        if params.token ~= self.token then
+        if self.token and params.token ~= self.token then
             Bridge.fail(Bridge.AUTHENTICATION_FAILED, 'Authentication failed')
         end
 

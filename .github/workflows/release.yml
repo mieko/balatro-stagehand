@@ -1,0 +1,52 @@
+name: Release mod
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - run: npm ci --omit=dev
+      - run: npm run test:setup
+      - name: Build release ZIP
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          if [[ "$RELEASE_TAG" != "v$version" ]]; then
+            echo "Release tag must match package.json: v$version" >&2
+            exit 1
+          fi
+          npm run build:mod
+
+      - name: Publish release ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_NOTES: |
+            Download the BalatroStagehand ZIP, extract its BalatroStagehand folder into
+            Lovely's Mods directory, and restart Balatro. Lovely must be installed separately.
+
+            See the installation guide for platform setup and optional network/Developer Mode settings.
+        run: >-
+          gh release create "$RELEASE_TAG" .local/dist/BalatroStagehand-*.zip
+          --verify-tag --title "Balatro Stagehand $RELEASE_TAG"
+          --notes "$RELEASE_NOTES" --generate-notes
